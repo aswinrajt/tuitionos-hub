@@ -20,6 +20,7 @@ import { Route as SettingsRouteImport } from './routes/settings'
 import { Route as TeachersRouteImport } from './routes/teachers'
 import { Route as BatchesIndexRouteImport } from './routes/batches.index'
 import { Route as BatchesBatchIdRouteImport } from './routes/batches.$batchId'
+import { Route as ParentLoginRouteImport } from './routes/parent.login'
 import { Route as StudentsIndexRouteImport } from './routes/students.index'
 import { Route as StudentsStudentIdRouteImport } from './routes/students.$studentId'
 
@@ -78,6 +79,11 @@ const BatchesBatchIdRoute = BatchesBatchIdRouteImport.update({
   path: '/batches/$batchId',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ParentLoginRoute = ParentLoginRouteImport.update({
+  id: '/parent/login',
+  path: '/parent/login',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const StudentsIndexRoute = StudentsIndexRouteImport.update({
   id: '/students/',
   path: '/students/',
@@ -100,6 +106,7 @@ export interface FileRoutesByFullPath {
   '/settings': typeof SettingsRoute
   '/teachers': typeof TeachersRoute
   '/batches/$batchId': typeof BatchesBatchIdRoute
+  '/parent/login': typeof ParentLoginRoute
   '/students/$studentId': typeof StudentsStudentIdRoute
   '/batches/': typeof BatchesIndexRoute
   '/students/': typeof StudentsIndexRoute
@@ -115,6 +122,7 @@ export interface FileRoutesByTo {
   '/settings': typeof SettingsRoute
   '/teachers': typeof TeachersRoute
   '/batches/$batchId': typeof BatchesBatchIdRoute
+  '/parent/login': typeof ParentLoginRoute
   '/students/$studentId': typeof StudentsStudentIdRoute
   '/batches': typeof BatchesIndexRoute
   '/students': typeof StudentsIndexRoute
@@ -131,6 +139,7 @@ export interface FileRoutesById {
   '/settings': typeof SettingsRoute
   '/teachers': typeof TeachersRoute
   '/batches/$batchId': typeof BatchesBatchIdRoute
+  '/parent/login': typeof ParentLoginRoute
   '/students/$studentId': typeof StudentsStudentIdRoute
   '/batches/': typeof BatchesIndexRoute
   '/students/': typeof StudentsIndexRoute
@@ -148,6 +157,7 @@ export interface FileRouteTypes {
     | '/settings'
     | '/teachers'
     | '/batches/$batchId'
+    | '/parent/login'
     | '/students/$studentId'
     | '/batches/'
     | '/students/'
@@ -163,6 +173,7 @@ export interface FileRouteTypes {
     | '/settings'
     | '/teachers'
     | '/batches/$batchId'
+    | '/parent/login'
     | '/students/$studentId'
     | '/batches'
     | '/students'
@@ -178,6 +189,7 @@ export interface FileRouteTypes {
     | '/settings'
     | '/teachers'
     | '/batches/$batchId'
+    | '/parent/login'
     | '/students/$studentId'
     | '/batches/'
     | '/students/'
@@ -194,6 +206,7 @@ export interface RootRouteChildren {
   SettingsRoute: typeof SettingsRoute
   TeachersRoute: typeof TeachersRoute
   BatchesBatchIdRoute: typeof BatchesBatchIdRoute
+  ParentLoginRoute: typeof ParentLoginRoute
   StudentsStudentIdRoute: typeof StudentsStudentIdRoute
   BatchesIndexRoute: typeof BatchesIndexRoute
   StudentsIndexRoute: typeof StudentsIndexRoute
@@ -278,6 +291,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof BatchesBatchIdRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/parent/login': {
+      id: '/parent/login'
+      path: '/parent/login'
+      fullPath: '/parent/login'
+      preLoaderRoute: typeof ParentLoginRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/students/': {
       id: '/students/'
       path: '/students'
@@ -306,6 +326,7 @@ const rootRouteChildren: RootRouteChildren = {
   SettingsRoute: SettingsRoute,
   TeachersRoute: TeachersRoute,
   BatchesBatchIdRoute: BatchesBatchIdRoute,
+  ParentLoginRoute: ParentLoginRoute,
   StudentsStudentIdRoute: StudentsStudentIdRoute,
   BatchesIndexRoute: BatchesIndexRoute,
   StudentsIndexRoute: StudentsIndexRoute,
