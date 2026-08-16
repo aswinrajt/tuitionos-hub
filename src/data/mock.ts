@@ -1,5 +1,7 @@
 import type {
   ActivityItem,
+  Announcement,
+  ParentAccount,
   AttendanceRecord,
   Batch,
   CentreSettings,
@@ -173,3 +175,41 @@ export const settings: CentreSettings = {
   classes: CLASSES,
   subjects: SUBJECTS,
 };
+
+// ---- Announcements created by the admin/owner ----
+export const announcements: Announcement[] = [
+  { id: "an1", title: "Diwali break: 4th to 8th November", body: "The centre will remain closed for Diwali from 4th to 8th November. Regular classes resume on 9th November as per the usual timetable.", audience: "all", createdAt: shift(-1), pinned: true },
+  { id: "an2", title: "Parent-teacher meeting this Saturday", body: "PTM for Class 10 batches is scheduled this Saturday between 10:00 AM and 1:00 PM. Please carry your child's progress card.", audience: "b1", createdAt: shift(-3), pinned: false },
+  { id: "an3", title: "Fee due date reminder", body: "Monthly fees are due by the 5th of every month. Pay at the front desk or through UPI to avoid a late fee of Rs.100.", audience: "all", createdAt: shift(-6), pinned: false },
+  { id: "an4", title: "Extra Science doubt-clearing class", body: "An additional doubt-clearing session for X-B Science Evening will be held on Sunday at 11:00 AM in Room 2.", audience: "b2", createdAt: shift(-8), pinned: false },
+];
+
+// ---- Parent accounts (a parent may have more than one child) ----
+export const parentAccounts: ParentAccount[] = [
+  {
+    id: "p1",
+    name: "Aswin Raj",
+    phone: "+91 98765 43210",
+    email: "aswin.raj@gmail.com",
+    studentIds: ["s1", "s4", "s14"],
+    notifyFees: true,
+    notifyAttendance: true,
+    notifyHomework: true,
+    notifyResults: true,
+    notifyAnnouncements: true,
+  },
+  {
+    id: "p2",
+    name: "Lata Patel",
+    phone: "+91 99887 76655",
+    email: "lata.patel@gmail.com",
+    studentIds: ["s2"],
+    notifyFees: true,
+    notifyAttendance: true,
+    notifyHomework: false,
+    notifyResults: true,
+    notifyAnnouncements: true,
+  },
+];
+
+export const DEMO_PARENT_OTP = "1234";
