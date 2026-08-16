@@ -23,6 +23,8 @@ import { Route as BatchesBatchIdRouteImport } from './routes/batches.$batchId'
 import { Route as ParentIndexRouteImport } from './routes/parent.index'
 import { Route as ParentAttendanceRouteImport } from './routes/parent.attendance'
 import { Route as ParentChildRouteImport } from './routes/parent.child'
+import { Route as ParentFeesRouteImport } from './routes/parent.fees'
+import { Route as ParentHomeworkRouteImport } from './routes/parent.homework'
 import { Route as ParentLoginRouteImport } from './routes/parent.login'
 import { Route as StudentsIndexRouteImport } from './routes/students.index'
 import { Route as StudentsStudentIdRouteImport } from './routes/students.$studentId'
@@ -97,6 +99,16 @@ const ParentChildRoute = ParentChildRouteImport.update({
   path: '/parent/child',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ParentFeesRoute = ParentFeesRouteImport.update({
+  id: '/parent/fees',
+  path: '/parent/fees',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ParentHomeworkRoute = ParentHomeworkRouteImport.update({
+  id: '/parent/homework',
+  path: '/parent/homework',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ParentLoginRoute = ParentLoginRouteImport.update({
   id: '/parent/login',
   path: '/parent/login',
@@ -126,6 +138,8 @@ export interface FileRoutesByFullPath {
   '/batches/$batchId': typeof BatchesBatchIdRoute
   '/parent/attendance': typeof ParentAttendanceRoute
   '/parent/child': typeof ParentChildRoute
+  '/parent/fees': typeof ParentFeesRoute
+  '/parent/homework': typeof ParentHomeworkRoute
   '/parent/login': typeof ParentLoginRoute
   '/students/$studentId': typeof StudentsStudentIdRoute
   '/batches/': typeof BatchesIndexRoute
@@ -145,6 +159,8 @@ export interface FileRoutesByTo {
   '/batches/$batchId': typeof BatchesBatchIdRoute
   '/parent/attendance': typeof ParentAttendanceRoute
   '/parent/child': typeof ParentChildRoute
+  '/parent/fees': typeof ParentFeesRoute
+  '/parent/homework': typeof ParentHomeworkRoute
   '/parent/login': typeof ParentLoginRoute
   '/students/$studentId': typeof StudentsStudentIdRoute
   '/batches': typeof BatchesIndexRoute
@@ -165,6 +181,8 @@ export interface FileRoutesById {
   '/batches/$batchId': typeof BatchesBatchIdRoute
   '/parent/attendance': typeof ParentAttendanceRoute
   '/parent/child': typeof ParentChildRoute
+  '/parent/fees': typeof ParentFeesRoute
+  '/parent/homework': typeof ParentHomeworkRoute
   '/parent/login': typeof ParentLoginRoute
   '/students/$studentId': typeof StudentsStudentIdRoute
   '/batches/': typeof BatchesIndexRoute
@@ -186,6 +204,8 @@ export interface FileRouteTypes {
     | '/batches/$batchId'
     | '/parent/attendance'
     | '/parent/child'
+    | '/parent/fees'
+    | '/parent/homework'
     | '/parent/login'
     | '/students/$studentId'
     | '/batches/'
@@ -205,6 +225,8 @@ export interface FileRouteTypes {
     | '/batches/$batchId'
     | '/parent/attendance'
     | '/parent/child'
+    | '/parent/fees'
+    | '/parent/homework'
     | '/parent/login'
     | '/students/$studentId'
     | '/batches'
@@ -224,6 +246,8 @@ export interface FileRouteTypes {
     | '/batches/$batchId'
     | '/parent/attendance'
     | '/parent/child'
+    | '/parent/fees'
+    | '/parent/homework'
     | '/parent/login'
     | '/students/$studentId'
     | '/batches/'
@@ -244,6 +268,8 @@ export interface RootRouteChildren {
   BatchesBatchIdRoute: typeof BatchesBatchIdRoute
   ParentAttendanceRoute: typeof ParentAttendanceRoute
   ParentChildRoute: typeof ParentChildRoute
+  ParentFeesRoute: typeof ParentFeesRoute
+  ParentHomeworkRoute: typeof ParentHomeworkRoute
   ParentLoginRoute: typeof ParentLoginRoute
   StudentsStudentIdRoute: typeof StudentsStudentIdRoute
   BatchesIndexRoute: typeof BatchesIndexRoute
@@ -351,6 +377,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ParentChildRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/parent/fees': {
+      id: '/parent/fees'
+      path: '/parent/fees'
+      fullPath: '/parent/fees'
+      preLoaderRoute: typeof ParentFeesRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/parent/homework': {
+      id: '/parent/homework'
+      path: '/parent/homework'
+      fullPath: '/parent/homework'
+      preLoaderRoute: typeof ParentHomeworkRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/parent/login': {
       id: '/parent/login'
       path: '/parent/login'
@@ -388,6 +428,8 @@ const rootRouteChildren: RootRouteChildren = {
   BatchesBatchIdRoute: BatchesBatchIdRoute,
   ParentAttendanceRoute: ParentAttendanceRoute,
   ParentChildRoute: ParentChildRoute,
+  ParentFeesRoute: ParentFeesRoute,
+  ParentHomeworkRoute: ParentHomeworkRoute,
   ParentLoginRoute: ParentLoginRoute,
   StudentsStudentIdRoute: StudentsStudentIdRoute,
   BatchesIndexRoute: BatchesIndexRoute,
