@@ -35,7 +35,7 @@ export const Route = createFileRoute("/settings")({
 
 function SettingsPage() {
   const store = useStore();
-  const { user, signOut } = useAuth();
+  const { user, logout } = useAuth();
   const [draft, setDraft] = useState<CentreSettings>(store.settings);
   const [newClass, setNewClass] = useState("");
   const [newSubject, setNewSubject] = useState("");
@@ -115,7 +115,7 @@ function SettingsPage() {
                   </p>
                 </div>
               </div>
-              <Button variant="outline" onClick={signOut}>
+              <Button variant="outline" onClick={logout}>
                 <LogOut className="mr-2 size-4" /> Sign out
               </Button>
             </div>
