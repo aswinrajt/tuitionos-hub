@@ -1,12 +1,18 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { CalendarDays, ClipboardList, GraduationCap, MapPin, Phone, User2, Wallet } from "lucide-react";
-import { ParentCard, ParentEmpty, ParentPageTitle, ParentShell, useParentContext } from "@/components/parent/ParentShell";
+import {
+  ParentCard,
+  ParentEmpty,
+  ParentPageTitle,
+  ParentScreenLoading,
+  ParentShell,
+  useParentContext,
+} from "@/components/parent/ParentShell";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
-import { childAttendanceSummary, childExams } from "@/lib/parent";
-import { studentFeeStatus } from "@/lib/selectors";
-import { CURRENT_MONTH } from "@/data/mock";
+import { useParentAuth } from "@/store/parent-auth";
+import { useParentChild } from "@/hooks/api";
 import { formatDate, formatTime, initials, inr, pct } from "@/lib/format";
 
 export const Route = createFileRoute("/parent/child")({
@@ -22,8 +28,12 @@ export const Route = createFileRoute("/parent/child")({
 });
 
 function ChildProfilePage() {
-  const { child, store } = useParentContext();
-  if (!child) {
+  const { activeChildId } = useParentAuth();
+  const { child: option } = useParentContext();
+  const studentId = option?.id ?? activeChildId;
+  const { data: child, isLoading } = useParentChild(studentId);
+
+  if (!studentId) {
     return (
       <ParentShell>
         <ParentEmpty title="No child linked" body="Please contact the tuition centre." />
@@ -31,12 +41,15 @@ function ChildProfilePage() {
     );
   }
 
-  const batch = store.batches.find((b) => b.id === child.batchId);
-  const teacher = store.teachers.find((t) => t.id === batch?.teacherId);
-  const attendance = childAttendanceSummary(store.attendance, child);
-  const exams = childExams(store.exams, child);
-  const avg = exams.length ? exams.reduce((a, b) => a + b.percent, 0) / exams.length : 0;
-  const feeStatus = studentFeeStatus(store.feePayments, child, CURRENT_MONTH, store.settings.feeDueDay);
+  if (isLoading || !child) {
+    return (
+      <ParentShell>
+        <ParentScreenLoading />
+      </ParentShell>
+    );
+  }
+
+  const batch = child.batch;
 
   return (
     <ParentShell>
@@ -57,7 +70,7 @@ function ChildProfilePage() {
         </div>
         <dl className="mt-4 space-y-2.5 text-sm">
           <Row icon={GraduationCap} label="Joined" value={formatDate(child.joiningDate)} />
-          <Row icon={Wallet} label="Monthly fee" value={`${inr(child.monthlyFee)} · ${feeStatus}`} />
+          <Row icon={Wallet} label="Monthly fee" value={`${inr(child.monthlyFee)} · ${child.feeStatus}`} />
           <Row icon={User2} label="Parent / guardian" value={child.parentName} />
           <Row icon={Phone} label="Contact" value={child.parentPhone} />
           <Row icon={MapPin} label="Address" value={child.address} />
@@ -77,20 +90,20 @@ function ChildProfilePage() {
           <div>
             <div className="flex items-center justify-between text-sm">
               <span className="text-muted-foreground">Attendance</span>
-              <span className="font-semibold">{pct(attendance.percent)}</span>
+              <span className="font-semibold">{pct(child.attendancePercent)}</span>
             </div>
-            <Progress value={attendance.percent} className="mt-1.5" />
+            <Progress value={child.attendancePercent} className="mt-1.5" />
             <p className="mt-1 text-xs text-muted-foreground">
-              {attendance.present} present of {attendance.total} classes
+              {child.attendancePresent} present of {child.attendanceTotal} classes
             </p>
           </div>
           <div>
             <div className="flex items-center justify-between text-sm">
               <span className="text-muted-foreground">Average exam score</span>
-              <span className="font-semibold">{exams.length ? pct(avg) : "—"}</span>
+              <span className="font-semibold">{child.examCount ? pct(child.examAverage) : "—"}</span>
             </div>
-            <Progress value={avg} className="mt-1.5" />
-            <p className="mt-1 text-xs text-muted-foreground">{exams.length} results published</p>
+            <Progress value={child.examAverage} className="mt-1.5" />
+            <p className="mt-1 text-xs text-muted-foreground">{child.examCount} results published</p>
           </div>
         </div>
       </ParentCard>
@@ -104,11 +117,11 @@ function ChildProfilePage() {
             </p>
             <p className="text-muted-foreground">Room {batch.room}</p>
             <div className="mt-3 rounded-xl bg-muted/50 p-3">
-              <p className="font-medium">{teacher?.name ?? "Teacher not assigned"}</p>
-              <p className="text-xs text-muted-foreground">{teacher?.qualification}</p>
-              {teacher ? (
-                <a href={`tel:${teacher.phone.replace(/\s/g, "")}`} className="mt-2 inline-flex items-center gap-1.5 text-sm font-medium text-primary">
-                  <Phone className="size-4" /> Call {teacher.phone}
+              <p className="font-medium">{batch.teacherName}</p>
+              <p className="text-xs text-muted-foreground">{batch.teacherQualification}</p>
+              {batch.teacherPhone ? (
+                <a href={`tel:${batch.teacherPhone.replace(/\s/g, "")}`} className="mt-2 inline-flex items-center gap-1.5 text-sm font-medium text-primary">
+                  <Phone className="size-4" /> Call {batch.teacherPhone}
                 </a>
               ) : null}
             </div>

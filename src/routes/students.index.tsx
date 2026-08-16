@@ -1,5 +1,5 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import { MoreVertical, Pencil, Plus, Search, Trash2, Users, Wallet } from "lucide-react";
 import { AppShell } from "@/components/layout/AppShell";
 import { PageHeader } from "@/components/common/PageHeader";
@@ -20,9 +20,7 @@ import {
 import { StudentFormModal } from "@/components/modals/StudentFormModal";
 import { RecordPaymentModal } from "@/components/modals/RecordPaymentModal";
 import { ReceiptDialog } from "@/components/modals/ReceiptDialog";
-import { useStore } from "@/store/tuition-store";
-import { CURRENT_MONTH } from "@/data/mock";
-import { attendancePct, studentFeeStatus } from "@/lib/selectors";
+import { useBatches, useDeleteStudent, useSettings, useStudents, type StudentRow } from "@/hooks/api";
 import { inr, initials, pct } from "@/lib/format";
 import type { FeePayment, Student } from "@/data/types";
 import { toast } from "sonner";
@@ -43,7 +41,6 @@ export const Route = createFileRoute("/students/")({
 });
 
 function StudentsPage() {
-  const store = useStore();
   const navigate = useNavigate();
   const [query, setQuery] = useState("");
   const [classFilter, setClassFilter] = useState("all");
@@ -55,27 +52,21 @@ function StudentsPage() {
   const [payFor, setPayFor] = useState<Student | null>(null);
   const [receipt, setReceipt] = useState<FeePayment | null>(null);
 
-  const rows = useMemo(
-    () =>
-      store.students.filter((s) => {
-        const q = query.trim().toLowerCase();
-        const matchesQuery =
-          !q ||
-          s.name.toLowerCase().includes(q) ||
-          s.phone.includes(q) ||
-          s.parentName.toLowerCase().includes(q) ||
-          s.parentPhone.includes(q);
-        return (
-          matchesQuery &&
-          (classFilter === "all" || s.className === classFilter) &&
-          (batchFilter === "all" || s.batchId === batchFilter) &&
-          (statusFilter === "all" || s.status === statusFilter)
-        );
-      }),
-    [store.students, query, classFilter, batchFilter, statusFilter],
-  );
+  const filters = {
+    ...(query.trim() ? { q: query.trim() } : {}),
+    ...(classFilter !== "all" ? { className: classFilter } : {}),
+    ...(batchFilter !== "all" ? { batchId: batchFilter } : {}),
+    ...(statusFilter !== "all" ? { status: statusFilter } : {}),
+  };
 
-  const columns: Column<Student>[] = [
+  const { data: allStudents = [] } = useStudents();
+  const { data: rows = [], isLoading } = useStudents(filters);
+  const { data: batches = [] } = useBatches();
+  const { data: settings } = useSettings();
+  const deleteStudent = useDeleteStudent();
+  const classes = settings?.classes ?? [];
+
+  const columns: Column<StudentRow>[] = [
     {
       key: "name",
       header: "Student",
@@ -105,13 +96,13 @@ function StudentsPage() {
     {
       key: "batch",
       header: "Batch",
-      cell: (s) => store.batches.find((b) => b.id === s.batchId)?.name ?? "—",
+      cell: (s) => s.batchName ?? "—",
     },
     {
       key: "attendance",
       header: "Attendance",
       cell: (s) => {
-        const value = attendancePct(store.attendance, s.id);
+        const value = s.attendancePercent;
         return (
           <span className={value >= 75 ? "font-semibold text-success" : "font-semibold text-warning-foreground"}>
             {value ? pct(value) : "—"}
@@ -123,9 +114,7 @@ function StudentsPage() {
     {
       key: "feeStatus",
       header: "Fee status",
-      cell: (s) => (
-        <StatusBadge status={studentFeeStatus(store.feePayments, s, CURRENT_MONTH, store.settings.feeDueDay)} />
-      ),
+      cell: (s) => <StatusBadge status={s.feeStatus} />,
     },
     { key: "status", header: "Status", cell: (s) => <StatusBadge status={s.status} /> },
     {
@@ -167,7 +156,7 @@ function StudentsPage() {
     <AppShell>
       <PageHeader
         title="Students"
-        description={`${store.students.length} students enrolled · ${store.students.filter((s) => s.status === "active").length} active`}
+        description={`${allStudents.length} students enrolled · ${allStudents.filter((s) => s.status === "active").length} active`}
         actions={
           <Button
             onClick={() => {
@@ -195,14 +184,14 @@ function StudentsPage() {
             <SelectTrigger><SelectValue placeholder="Class" /></SelectTrigger>
             <SelectContent>
               <SelectItem value="all">All classes</SelectItem>
-              {store.settings.classes.map((c) => <SelectItem key={c} value={c}>{c}</SelectItem>)}
+              {classes.map((c) => <SelectItem key={c} value={c}>{c}</SelectItem>)}
             </SelectContent>
           </Select>
           <Select value={batchFilter} onValueChange={setBatchFilter}>
             <SelectTrigger><SelectValue placeholder="Batch" /></SelectTrigger>
             <SelectContent>
               <SelectItem value="all">All batches</SelectItem>
-              {store.batches.map((b) => <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>)}
+              {batches.map((b) => <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>)}
             </SelectContent>
           </Select>
           <Select value={statusFilter} onValueChange={setStatusFilter}>
@@ -224,6 +213,7 @@ function StudentsPage() {
         <DataTable
           columns={columns}
           rows={rows}
+          loading={isLoading}
           onRowClick={(s) => navigate({ to: "/students/$studentId", params: { studentId: s.id } })}
           empty={
             <EmptyState
@@ -262,13 +252,18 @@ function StudentsPage() {
         title={`Delete ${toDelete?.name}?`}
         description="This removes the student record along with their fee and attendance history from this view."
         confirmLabel="Delete student"
+        pendingLabel="Deleting…"
         destructive
+        pending={deleteStudent.isPending}
         onConfirm={() => {
-          if (toDelete) {
-            store.deleteStudent(toDelete.id);
-            toast.success(`${toDelete.name} deleted`);
-          }
-          setToDelete(null);
+          if (!toDelete) return;
+          const name = toDelete.name;
+          deleteStudent.mutate(toDelete.id, {
+            onSuccess: () => {
+              toast.success(`${name} deleted`);
+              setToDelete(null);
+            },
+          });
         }}
       />
     </AppShell>

@@ -1,11 +1,18 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useState } from "react";
 import { CheckCircle2, Clock, FileText } from "lucide-react";
-import { ParentCard, ParentEmpty, ParentPageTitle, ParentShell, useParentContext } from "@/components/parent/ParentShell";
+import {
+  ParentCard,
+  ParentEmpty,
+  ParentPageTitle,
+  ParentScreenLoading,
+  ParentShell,
+  useParentContext,
+} from "@/components/parent/ParentShell";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { childHomework } from "@/lib/parent";
-import { TODAY } from "@/data/mock";
+import { useParentAuth } from "@/store/parent-auth";
+import { useParentHomework } from "@/hooks/api";
 import { formatDate } from "@/lib/format";
 
 export const Route = createFileRoute("/parent/homework")({
@@ -21,10 +28,13 @@ export const Route = createFileRoute("/parent/homework")({
 });
 
 function ParentHomeworkPage() {
-  const { child, store } = useParentContext();
+  const { activeChildId } = useParentAuth();
+  const { child } = useParentContext();
+  const studentId = child?.id ?? activeChildId;
   const [tab, setTab] = useState<"pending" | "completed" | "all">("pending");
+  const { data: all = [], isLoading } = useParentHomework(studentId);
 
-  if (!child) {
+  if (!studentId) {
     return (
       <ParentShell>
         <ParentEmpty title="No child linked" />
@@ -32,13 +42,21 @@ function ParentHomeworkPage() {
     );
   }
 
-  const all = childHomework(store.homework, child);
+  if (isLoading) {
+    return (
+      <ParentShell>
+        <ParentScreenLoading />
+      </ParentShell>
+    );
+  }
+
   const list = tab === "all" ? all : all.filter((h) => h.status === tab);
-  const overdue = all.filter((h) => h.status === "pending" && h.dueDate < TODAY).length;
+  const overdue = all.filter((h) => h.overdue).length;
+  const firstName = (child?.name ?? "your child").split(" ")[0];
 
   return (
     <ParentShell>
-      <ParentPageTitle title="Homework" description={`Assigned by ${child.name.split(" ")[0]}'s teachers.`} />
+      <ParentPageTitle title="Homework" description={`Assigned by ${firstName}'s teachers.`} />
 
       <div className="grid grid-cols-3 gap-2">
         <Stat label="Pending" value={all.filter((h) => h.status === "pending").length} />
@@ -56,36 +74,33 @@ function ParentHomeworkPage() {
 
       {list.length ? (
         <div className="space-y-3">
-          {list.map((h) => {
-            const isOverdue = h.status === "pending" && h.dueDate < TODAY;
-            return (
-              <ParentCard key={h.id} className={isOverdue ? "border-destructive/40" : undefined}>
-                <div className="flex items-start gap-3">
-                  <span className="grid size-10 shrink-0 place-items-center rounded-xl bg-primary-soft text-primary">
-                    <FileText className="size-5" />
-                  </span>
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-start justify-between gap-2">
-                      <p className="font-display text-base font-semibold">{h.title}</p>
-                      <Badge variant={h.status === "completed" ? "default" : isOverdue ? "destructive" : "secondary"}>
-                        {h.status === "completed" ? "Done" : isOverdue ? "Overdue" : "Pending"}
-                      </Badge>
-                    </div>
-                    <p className="mt-0.5 text-xs text-muted-foreground">{h.subject}</p>
-                    <p className="mt-2 text-sm text-muted-foreground">{h.description}</p>
-                    <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted-foreground">
-                      <span className="flex items-center gap-1.5">
-                        <Clock className="size-3.5" /> Due {formatDate(h.dueDate)}
-                      </span>
-                      <span className="flex items-center gap-1.5">
-                        <CheckCircle2 className="size-3.5" /> Given {formatDate(h.assignedOn)}
-                      </span>
-                    </div>
+          {list.map((h) => (
+            <ParentCard key={h.id} className={h.overdue ? "border-destructive/40" : undefined}>
+              <div className="flex items-start gap-3">
+                <span className="grid size-10 shrink-0 place-items-center rounded-xl bg-primary-soft text-primary">
+                  <FileText className="size-5" />
+                </span>
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-start justify-between gap-2">
+                    <p className="font-display text-base font-semibold">{h.title}</p>
+                    <Badge variant={h.status === "completed" ? "default" : h.overdue ? "destructive" : "secondary"}>
+                      {h.status === "completed" ? "Done" : h.overdue ? "Overdue" : "Pending"}
+                    </Badge>
+                  </div>
+                  <p className="mt-0.5 text-xs text-muted-foreground">{h.subject}</p>
+                  <p className="mt-2 text-sm text-muted-foreground">{h.description}</p>
+                  <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted-foreground">
+                    <span className="flex items-center gap-1.5">
+                      <Clock className="size-3.5" /> Due {formatDate(h.dueDate)}
+                    </span>
+                    <span className="flex items-center gap-1.5">
+                      <CheckCircle2 className="size-3.5" /> Given {formatDate(h.assignedOn)}
+                    </span>
                   </div>
                 </div>
-              </ParentCard>
-            );
-          })}
+              </div>
+            </ParentCard>
+          ))}
         </div>
       ) : (
         <ParentEmpty

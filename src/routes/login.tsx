@@ -1,12 +1,13 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
-import { GraduationCap, Loader2, ShieldCheck, Sparkles, Wallet } from "lucide-react";
+import { GraduationCap, ShieldCheck, Sparkles, Wallet } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Field } from "@/components/common/FormModal";
 import { Checkbox } from "@/components/ui/checkbox";
-import { DEMO_USER, useAuth } from "@/store/auth";
+import { useAuth } from "@/store/auth";
+import { api, ApiError, toastError } from "@/lib/api";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/login")({
@@ -44,20 +45,32 @@ function LoginPage() {
   const [centre, setCentre] = useState("");
   const [owner, setOwner] = useState("");
   const [regEmail, setRegEmail] = useState("");
+  const [regPassword, setRegPassword] = useState("demo1234");
   const [resetEmail, setResetEmail] = useState("");
 
   useEffect(() => {
     if (ready && user) navigate({ to: "/" });
   }, [ready, user, navigate]);
 
-  const finish = (name: string, mail: string, centreName: string, action: string) => {
+  const finish = async (
+    action: string,
+    path: string,
+    body?: Record<string, unknown>,
+  ) => {
     setLoading(action);
-    setTimeout(() => {
-      login({ name, email: mail, centreName, role: "owner" });
-      toast.success(`Welcome to TuitionOS, ${name.split(" ")[0]}!`);
-      setLoading(null);
+    try {
+      const { data } = await api<{
+        user: { id: string; name: string; email: string; centreName: string; role: "owner" | "teacher" };
+        accessToken: string;
+      }>(path, { method: "POST", body: body ? JSON.stringify(body) : undefined });
+      login(data.user, data.accessToken);
+      toast.success(`Welcome to TuitionOS, ${data.user.name.split(" ")[0]}!`);
       navigate({ to: "/" });
-    }, 700);
+    } catch (err) {
+      toastError(err, err instanceof ApiError ? err.message : "Could not sign in");
+    } finally {
+      setLoading(null);
+    }
   };
 
   return (
@@ -121,7 +134,7 @@ function LoginPage() {
                 className="space-y-4"
                 onSubmit={(e) => {
                   e.preventDefault();
-                  finish(DEMO_USER.name, email, DEMO_USER.centreName, "login");
+                  void finish("login", "/v1/auth/login", { email, password });
                 }}
               >
                 <Field label="Email">
@@ -138,9 +151,8 @@ function LoginPage() {
                 <label className="flex items-center gap-2 text-sm text-muted-foreground">
                   <Checkbox defaultChecked /> Keep me signed in
                 </label>
-                <Button type="submit" className="w-full" disabled={loading === "login"}>
-                  {loading === "login" ? <Loader2 className="mr-2 size-4 animate-spin" /> : null}
-                  Sign in
+                <Button type="submit" className="w-full" loading={loading === "login"}>
+                  {loading === "login" ? "Signing in…" : "Sign in"}
                 </Button>
               </form>
               <div className="flex items-center gap-3 text-xs uppercase text-muted-foreground">
@@ -149,15 +161,17 @@ function LoginPage() {
               <Button
                 variant="outline"
                 className="w-full"
-                disabled={loading === "demo"}
-                onClick={() => finish(DEMO_USER.name, DEMO_USER.email, DEMO_USER.centreName, "demo")}
+                loading={loading === "demo"}
+                onClick={() => void finish("demo", "/v1/auth/demo")}
               >
                 {loading === "demo" ? (
-                  <Loader2 className="mr-2 size-4 animate-spin" />
+                  "Opening demo…"
                 ) : (
-                  <Sparkles className="mr-2 size-4 text-accent" />
+                  <>
+                    <Sparkles className="mr-2 size-4 text-accent" />
+                    Explore the demo centre
+                  </>
                 )}
-                Explore the demo centre
               </Button>
             </TabsContent>
 
@@ -172,7 +186,12 @@ function LoginPage() {
                 className="space-y-4"
                 onSubmit={(e) => {
                   e.preventDefault();
-                  finish(owner || "Centre Owner", regEmail, centre || "My Tuition Centre", "register");
+                  void finish("register", "/v1/auth/register", {
+                    centreName: centre,
+                    ownerName: owner,
+                    email: regEmail,
+                    password: regPassword,
+                  });
                 }}
               >
                 <Field label="Tuition centre name">
@@ -201,11 +220,16 @@ function LoginPage() {
                   />
                 </Field>
                 <Field label="Password" hint="Minimum 8 characters">
-                  <Input type="password" minLength={8} required defaultValue="demo1234" />
+                  <Input
+                    type="password"
+                    minLength={8}
+                    required
+                    value={regPassword}
+                    onChange={(e) => setRegPassword(e.target.value)}
+                  />
                 </Field>
-                <Button type="submit" className="w-full" disabled={loading === "register"}>
-                  {loading === "register" ? <Loader2 className="mr-2 size-4 animate-spin" /> : null}
-                  Create centre account
+                <Button type="submit" className="w-full" loading={loading === "register"}>
+                  {loading === "register" ? "Creating account…" : "Create centre account"}
                 </Button>
               </form>
             </TabsContent>
@@ -233,8 +257,21 @@ function LoginPage() {
                   className="space-y-4"
                   onSubmit={(e) => {
                     e.preventDefault();
-                    setForgotSent(true);
-                    toast.success("Password reset link sent");
+                    void (async () => {
+                      setLoading("forgot");
+                      try {
+                        await api("/v1/auth/forgot-password", {
+                          method: "POST",
+                          body: JSON.stringify({ email: resetEmail }),
+                        });
+                        setForgotSent(true);
+                        toast.success("Password reset link sent");
+                      } catch (err) {
+                        toastError(err);
+                      } finally {
+                        setLoading(null);
+                      }
+                    })();
                   }}
                 >
                   <Field label="Registered email">
@@ -246,8 +283,8 @@ function LoginPage() {
                       required
                     />
                   </Field>
-                  <Button type="submit" className="w-full">
-                    Send reset link
+                  <Button type="submit" className="w-full" loading={loading === "forgot"}>
+                    {loading === "forgot" ? "Sending…" : "Send reset link"}
                   </Button>
                 </form>
               )}

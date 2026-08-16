@@ -1,13 +1,21 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { HelpCircle, LogOut, Mail, Phone, Save, Users } from "lucide-react";
-import { ParentCard, ParentEmpty, ParentPageTitle, ParentShell, useParentContext } from "@/components/parent/ParentShell";
+import {
+  ParentCard,
+  ParentEmpty,
+  ParentPageTitle,
+  ParentScreenLoading,
+  ParentShell,
+  useParentContext,
+} from "@/components/parent/ParentShell";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Badge } from "@/components/ui/badge";
 import { useParentAuth } from "@/store/parent-auth";
+import { useParentMe, useUpdateParentAlerts, useUpdateParentProfile } from "@/hooks/api";
 import { initials } from "@/lib/format";
 import { toast } from "sonner";
 
@@ -24,12 +32,32 @@ export const Route = createFileRoute("/parent/profile")({
 });
 
 function ParentProfilePage() {
-  const { account, children, child, setActiveChildId, store } = useParentContext();
+  const { children, child, setActiveChildId } = useParentContext();
   const { logout } = useParentAuth();
   const navigate = useNavigate();
-  const [name, setName] = useState(account?.name ?? "");
-  const [phone, setPhone] = useState(account?.phone ?? "");
-  const [email, setEmail] = useState(account?.email ?? "");
+  const me = useParentMe();
+  const updateProfile = useUpdateParentProfile();
+  const updateAlerts = useUpdateParentAlerts();
+  const account = me.data?.parent;
+  const centre = me.data?.centre;
+  const [name, setName] = useState("");
+  const [phone, setPhone] = useState("");
+  const [email, setEmail] = useState("");
+
+  useEffect(() => {
+    if (!account) return;
+    setName(account.name);
+    setPhone(account.phone);
+    setEmail(account.email);
+  }, [account]);
+
+  if (me.isLoading) {
+    return (
+      <ParentShell>
+        <ParentScreenLoading />
+      </ParentShell>
+    );
+  }
 
   if (!account) {
     return (
@@ -76,12 +104,15 @@ function ParentProfilePage() {
           </div>
           <Button
             className="h-11 w-full"
-            onClick={() => {
-              store.updateParentAccount(account.id, { name, phone, email });
-              toast.success("Your details have been saved");
-            }}
+            loading={updateProfile.isPending}
+            onClick={() =>
+              updateProfile.mutate(
+                { name, phone, email },
+                { onSuccess: () => toast.success("Your details have been saved") },
+              )
+            }
           >
-            <Save className="mr-2 size-4" /> Save changes
+            <Save className="mr-2 size-4" /> {updateProfile.isPending ? "Saving…" : "Save changes"}
           </Button>
         </div>
       </ParentCard>
@@ -89,7 +120,6 @@ function ParentProfilePage() {
       <ParentCard title={`My children (${children.length})`}>
         <ul className="space-y-2">
           {children.map((c) => {
-            const batch = store.batches.find((b) => b.id === c.batchId);
             const active = c.id === child?.id;
             return (
               <li key={c.id}>
@@ -108,7 +138,7 @@ function ParentProfilePage() {
                   <span className="min-w-0 flex-1">
                     <span className="block truncate text-sm font-medium">{c.name}</span>
                     <span className="block truncate text-xs text-muted-foreground">
-                      {c.className} · {batch?.name ?? "No batch"}
+                      {c.className} · {c.batchName}
                     </span>
                   </span>
                   {active ? <Badge className="shrink-0">Viewing</Badge> : null}
@@ -133,9 +163,12 @@ function ParentProfilePage() {
               </div>
               <Switch
                 checked={account[t.key]}
+                disabled={updateAlerts.isPending}
                 onCheckedChange={(checked) => {
-                  store.updateParentAccount(account.id, { [t.key]: checked });
-                  toast.success(`${t.label} ${checked ? "on" : "off"}`);
+                  updateAlerts.mutate(
+                    { [t.key]: checked },
+                    { onSuccess: () => toast.success(`${t.label} ${checked ? "on" : "off"}`) },
+                  );
                 }}
               />
             </li>
@@ -148,11 +181,13 @@ function ParentProfilePage() {
           <p className="flex items-center gap-2 text-muted-foreground">
             <HelpCircle className="size-4" /> Call the office for anything you cannot find here.
           </p>
-          <p className="font-medium">{store.settings.centreName}</p>
-          <p className="text-muted-foreground">{store.settings.address}, {store.settings.city}</p>
-          <a href={`tel:${store.settings.ownerPhone.replace(/\s/g, "")}`} className="inline-flex items-center gap-1.5 font-medium text-primary">
-            <Phone className="size-4" /> {store.settings.ownerPhone}
-          </a>
+          <p className="font-medium">{centre?.name}</p>
+          <p className="text-muted-foreground">{centre?.address}, {centre?.city}</p>
+          {centre?.phone ? (
+            <a href={`tel:${centre.phone.replace(/\s/g, "")}`} className="inline-flex items-center gap-1.5 font-medium text-primary">
+              <Phone className="size-4" /> {centre.phone}
+            </a>
+          ) : null}
         </div>
       </ParentCard>
 
@@ -160,9 +195,10 @@ function ParentProfilePage() {
         variant="outline"
         className="h-12 w-full text-destructive"
         onClick={() => {
-          logout();
-          toast.success("Signed out");
-          navigate({ to: "/parent/login", replace: true });
+          void logout().then(() => {
+            toast.success("Signed out");
+            navigate({ to: "/parent/login", replace: true });
+          });
         }}
       >
         <LogOut className="mr-2 size-4" /> Sign out

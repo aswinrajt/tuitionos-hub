@@ -1,5 +1,5 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import { AlertTriangle, BellRing, Plus, Receipt, Search, TrendingUp, Wallet } from "lucide-react";
 import { Cell, Pie, PieChart, ResponsiveContainer, Tooltip } from "recharts";
 import { AppShell } from "@/components/layout/AppShell";
@@ -12,14 +12,13 @@ import { EmptyState } from "@/components/common/EmptyState";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Progress } from "@/components/ui/progress";
+import { Skeleton } from "@/components/ui/skeleton";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { RecordPaymentModal } from "@/components/modals/RecordPaymentModal";
 import { ReceiptDialog } from "@/components/modals/ReceiptDialog";
-import { useStore } from "@/store/tuition-store";
-import { CURRENT_MONTH, monthOffset } from "@/data/mock";
-import { feeSummary, studentFeeStatus } from "@/lib/selectors";
-import { formatDate, formatMonth, inr, initials, pct } from "@/lib/format";
-import type { FeePayment, Student } from "@/data/types";
+import { useFeePayments, useFeeStudents, useFeesSummary, useSendFeeReminders } from "@/hooks/api";
+import { CURRENT_MONTH, formatDate, formatMonth, inr, initials, monthOffset, pct } from "@/lib/format";
+import type { FeePayment } from "@/data/types";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/fees")({
@@ -39,37 +38,72 @@ export const Route = createFileRoute("/fees")({
 
 const monthOptions = [monthOffset(-3), monthOffset(-2), monthOffset(-1), CURRENT_MONTH];
 
+type FeeStatus = "paid" | "pending" | "overdue";
+
+type FeeStudentRow = {
+  id: string;
+  name: string;
+  className: string;
+  batchName: string;
+  parentPhone: string;
+  monthlyFee: number;
+  feeStatus?: FeeStatus;
+  status?: FeeStatus;
+  payment: FeePayment | null;
+};
+
+type FeesSummary = {
+  expected?: number;
+  collected?: number;
+  pending?: number;
+  overdueCount?: number;
+  collectionRate?: number;
+  paidCount?: number;
+  pendingCount?: number;
+  activeStudents?: number;
+  feeDueDay?: number;
+};
+
+type PaymentRow = FeePayment & { studentName?: string };
+
+function rowStatus(s: FeeStudentRow): FeeStatus {
+  return s.feeStatus ?? s.status ?? "pending";
+}
+
 function FeesPage() {
-  const store = useStore();
   const navigate = useNavigate();
   const [month, setMonth] = useState(CURRENT_MONTH);
   const [status, setStatus] = useState("all");
   const [query, setQuery] = useState("");
-  const [payFor, setPayFor] = useState<Student | null>(null);
+  const [payForId, setPayForId] = useState<string | undefined>();
   const [payOpen, setPayOpen] = useState(false);
   const [receipt, setReceipt] = useState<FeePayment | null>(null);
 
-  const active = store.students.filter((s) => s.status === "active");
-  const summary = feeSummary(active, store.feePayments, month, store.settings.feeDueDay);
+  const { data: summaryRaw, isLoading: summaryLoading } = useFeesSummary(month);
+  const { data: feeStudents, isLoading: studentsLoading } = useFeeStudents(month, status, query);
+  const { data: recentRaw, isLoading: recentLoading } = useFeePayments(8);
+  const sendReminders = useSendFeeReminders();
 
-  const rows = useMemo(
-    () =>
-      active
-        .map((s) => ({
-          ...s,
-          feeStatus: studentFeeStatus(store.feePayments, s, month, store.settings.feeDueDay),
-          payment: store.feePayments.find((p) => p.studentId === s.id && p.month === month),
-        }))
-        .filter((s) => (status === "all" || s.feeStatus === status) && s.name.toLowerCase().includes(query.trim().toLowerCase())),
-    [active, store.feePayments, month, status, query, store.settings.feeDueDay],
-  );
+  const summary = (summaryRaw ?? {}) as FeesSummary;
+  const expected = Number(summary.expected ?? 0);
+  const collected = Number(summary.collected ?? 0);
+  const pending = Number(summary.pending ?? 0);
+  const overdueCount = Number(summary.overdueCount ?? 0);
+  const collectionRate = Number(summary.collectionRate ?? 0);
+  const paidCount = Number(summary.paidCount ?? 0);
+  const activeCount = Number(summary.activeStudents ?? 0);
+  const pendingCount = Number(summary.pendingCount ?? Math.max(0, activeCount - paidCount - overdueCount));
+  const feeDueDay = Number(summary.feeDueDay ?? 5);
+
+  const rows = (feeStudents ?? []) as FeeStudentRow[];
+  const recent = (recentRaw ?? []) as PaymentRow[];
 
   const pieData = [
-    { name: "Collected", value: summary.collected },
-    { name: "Pending", value: summary.pending },
+    { name: "Collected", value: collected },
+    { name: "Pending", value: pending },
   ];
 
-  const columns: Column<(typeof rows)[number]>[] = [
+  const columns: Column<FeeStudentRow>[] = [
     {
       key: "student",
       header: "Student",
@@ -85,9 +119,9 @@ function FeesPage() {
         </div>
       ),
     },
-    { key: "batch", header: "Batch", cell: (s) => store.batches.find((b) => b.id === s.batchId)?.name ?? "—" },
+    { key: "batch", header: "Batch", cell: (s) => s.batchName ?? "—" },
     { key: "amount", header: "Fee", cell: (s) => inr(s.monthlyFee) },
-    { key: "status", header: "Status", cell: (s) => <StatusBadge status={s.feeStatus} /> },
+    { key: "status", header: "Status", cell: (s) => <StatusBadge status={rowStatus(s)} /> },
     {
       key: "paid",
       header: "Payment",
@@ -122,7 +156,7 @@ function FeesPage() {
             size="sm"
             onClick={(e) => {
               e.stopPropagation();
-              setPayFor(s);
+              setPayForId(s.id);
               setPayOpen(true);
             }}
           >
@@ -132,24 +166,27 @@ function FeesPage() {
     },
   ];
 
-  const recent = store.feePayments
-    .slice()
-    .sort((a, b) => b.paidOn.localeCompare(a.paidOn))
-    .slice(0, 8);
-
   return (
     <AppShell>
       <PageHeader
         title="Fees"
-        description={`${formatMonth(month)} · ${summary.paidCount} of ${active.length} students paid`}
+        description={`${formatMonth(month)} · ${paidCount} of ${activeCount} students paid`}
         actions={
           <>
-            <Button variant="outline" onClick={() => toast.success(`Reminder sent to ${summary.overdueCount} parents`)}>
-              <BellRing className="mr-2 size-4" /> Send reminders
+            <Button
+              variant="outline"
+              loading={sendReminders.isPending}
+              onClick={() =>
+                sendReminders.mutate(month, {
+                  onSuccess: (d) => toast.success(`Reminder sent to ${d.sent} parents`),
+                })
+              }
+            >
+              <BellRing className="mr-2 size-4" /> {sendReminders.isPending ? "Sending…" : "Send reminders"}
             </Button>
             <Button
               onClick={() => {
-                setPayFor(null);
+                setPayForId(undefined);
                 setPayOpen(true);
               }}
             >
@@ -160,25 +197,31 @@ function FeesPage() {
       />
 
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        <StatCard label="Total expected" value={inr(summary.expected, { compact: true })} hint={`${active.length} active students`} icon={TrendingUp} />
-        <StatCard label="Collected" value={inr(summary.collected, { compact: true })} hint={pct(summary.collectionRate) + " of expected"} icon={Wallet} tone="success" />
-        <StatCard label="Pending" value={inr(summary.pending, { compact: true })} hint={`${active.length - summary.paidCount} students`} icon={Receipt} tone="warning" />
-        <StatCard label="Overdue" value={summary.overdueCount} hint={`Due day ${store.settings.feeDueDay} of month`} icon={AlertTriangle} tone="destructive" />
+        {summaryLoading ? (
+          Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} className="h-24 rounded-2xl" />)
+        ) : (
+          <>
+            <StatCard label="Total expected" value={inr(expected, { compact: true })} hint={`${activeCount} active students`} icon={TrendingUp} />
+            <StatCard label="Collected" value={inr(collected, { compact: true })} hint={pct(collectionRate) + " of expected"} icon={Wallet} tone="success" />
+            <StatCard label="Pending" value={inr(pending, { compact: true })} hint={`${Math.max(0, activeCount - paidCount)} students`} icon={Receipt} tone="warning" />
+            <StatCard label="Overdue" value={overdueCount} hint={`Due day ${feeDueDay} of month`} icon={AlertTriangle} tone="destructive" />
+          </>
+        )}
       </div>
 
       <div className="grid gap-5 lg:grid-cols-3">
         <SectionCard title="Collection progress" description={formatMonth(month)} className="lg:col-span-2">
           <div className="space-y-4">
             <div className="flex flex-wrap items-end justify-between gap-2">
-              <p className="font-display text-3xl font-semibold text-primary">{inr(summary.collected)}</p>
-              <p className="text-sm text-muted-foreground">of {inr(summary.expected)} expected</p>
+              <p className="font-display text-3xl font-semibold text-primary">{inr(collected)}</p>
+              <p className="text-sm text-muted-foreground">of {inr(expected)} expected</p>
             </div>
-            <Progress value={summary.collectionRate} className="h-3" />
+            <Progress value={collectionRate} className="h-3" />
             <div className="grid gap-3 sm:grid-cols-3">
               {[
-                ["Paid", summary.paidCount, "text-success"],
-                ["Pending", active.length - summary.paidCount - summary.overdueCount, "text-warning-foreground"],
-                ["Overdue", summary.overdueCount, "text-destructive"],
+                ["Paid", paidCount, "text-success"],
+                ["Pending", pendingCount, "text-warning-foreground"],
+                ["Overdue", overdueCount, "text-destructive"],
               ].map(([label, value, tone]) => (
                 <div key={label as string} className="rounded-xl border border-border p-3">
                   <p className="text-xs uppercase tracking-wide text-muted-foreground">{label as string}</p>
@@ -214,11 +257,11 @@ function FeesPage() {
           <div className="space-y-1.5 text-sm">
             <p className="flex items-center justify-between">
               <span className="flex items-center gap-2"><span className="size-2.5 rounded-full bg-chart-1" /> Collected</span>
-              <span className="font-semibold">{inr(summary.collected)}</span>
+              <span className="font-semibold">{inr(collected)}</span>
             </p>
             <p className="flex items-center justify-between">
               <span className="flex items-center gap-2"><span className="size-2.5 rounded-full bg-chart-2" /> Pending</span>
-              <span className="font-semibold">{inr(summary.pending)}</span>
+              <span className="font-semibold">{inr(pending)}</span>
             </p>
           </div>
         </SectionCard>
@@ -253,39 +296,45 @@ function FeesPage() {
           columns={columns}
           rows={rows}
           onRowClick={(s) => navigate({ to: "/students/$studentId", params: { studentId: s.id } })}
+          loading={studentsLoading}
           empty={<EmptyState icon={Wallet} title="No students match these filters" description="Change the month or status filter to see fee records." />}
         />
       </SectionCard>
 
       <SectionCard title="Payment history" description="Most recent receipts" bodyClassName="p-0">
         <ul className="divide-y divide-border">
-          {recent.map((p) => {
-            const student = store.students.find((s) => s.id === p.studentId);
-            return (
-              <li key={p.id} className="flex items-center gap-3 px-4 py-3">
-                <span className="grid size-9 place-items-center rounded-full bg-success-soft text-xs font-bold text-success">
-                  {initials(student?.name ?? "?")}
-                </span>
-                <div className="min-w-0 flex-1">
-                  <p className="truncate font-medium">{student?.name ?? "Unknown student"}</p>
-                  <p className="text-xs text-muted-foreground">
-                    {p.receiptNo} · {formatMonth(p.month)} · {p.method}
-                  </p>
-                </div>
-                <span className="font-semibold">{inr(p.amount)}</span>
-                <Button variant="ghost" size="sm" onClick={() => setReceipt(p)}>
-                  View
-                </Button>
+          {recentLoading ? (
+            Array.from({ length: 4 }).map((_, i) => (
+              <li key={i} className="px-4 py-3">
+                <Skeleton className="h-10 w-full" />
               </li>
-            );
-          })}
+            ))
+          ) : (
+            recent.map((p) => (
+            <li key={p.id} className="flex items-center gap-3 px-4 py-3">
+              <span className="grid size-9 place-items-center rounded-full bg-success-soft text-xs font-bold text-success">
+                {initials(p.studentName ?? "?")}
+              </span>
+              <div className="min-w-0 flex-1">
+                <p className="truncate font-medium">{p.studentName ?? "Unknown student"}</p>
+                <p className="text-xs text-muted-foreground">
+                  {p.receiptNo} · {formatMonth(p.month)} · {p.method}
+                </p>
+              </div>
+              <span className="font-semibold">{inr(p.amount)}</span>
+              <Button variant="ghost" size="sm" onClick={() => setReceipt(p)}>
+                View
+              </Button>
+            </li>
+            ))
+          )}
         </ul>
       </SectionCard>
 
       <RecordPaymentModal
         open={payOpen}
         onOpenChange={setPayOpen}
-        studentId={payFor?.id}
+        studentId={payForId}
         month={month}
         onRecorded={setReceipt}
       />

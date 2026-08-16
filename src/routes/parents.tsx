@@ -1,6 +1,6 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useState } from "react";
-import { CalendarCheck, ClipboardList, ExternalLink, Megaphone, MessageSquare, Send, Smartphone, UserRound, Wallet } from "lucide-react";
+import { useEffect, useState } from "react";
+import { CalendarCheck, ClipboardList, ExternalLink, Megaphone, MessageSquare, Send, Smartphone, Trash2, UserRound, Wallet } from "lucide-react";
 import { AppShell } from "@/components/layout/AppShell";
 import { PageHeader } from "@/components/common/PageHeader";
 import { SectionCard } from "@/components/common/SectionCard";
@@ -11,10 +11,18 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { useStore } from "@/store/tuition-store";
-import { attendancePct, examStats } from "@/lib/selectors";
-import { formatDate, initials, inr, pct } from "@/lib/format";
-import { TODAY } from "@/data/mock";
+import { Skeleton } from "@/components/ui/skeleton";
+import {
+  useAnnouncements,
+  useBatches,
+  useCreateAnnouncement,
+  useDeleteAnnouncement,
+  useInviteParent,
+  useParentPreview,
+  useParents,
+  useStudents,
+} from "@/hooks/api";
+import { CURRENT_MONTH, formatDate, initials, inr, pct } from "@/lib/format";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/parents")({
@@ -32,36 +40,94 @@ export const Route = createFileRoute("/parents")({
   component: ParentsPage,
 });
 
+type ParentPreview = {
+  student: { id: string; name: string; className: string; monthlyFee: number; parentName: string };
+  batchName: string;
+  teacherName: string;
+  teacherPhone: string;
+  attendancePercent: number;
+  feePaid: boolean;
+  homework: { id: string; title: string; subject: string; dueDate: string; status: "pending" | "completed" }[];
+  results: { examId: string; name: string; marks: number | null; maxMarks: number; classAvg: number }[];
+};
+
 function ParentsPage() {
-  const store = useStore();
-  const [studentId, setStudentId] = useState(store.students[0]?.id ?? "");
-  const student = store.students.find((s) => s.id === studentId) ?? store.students[0];
+  const { data: students = [], isLoading: studentsLoading } = useStudents();
+  const { data: parents = [] } = useParents();
+  const [studentId, setStudentId] = useState("");
+  const inviteParent = useInviteParent();
 
-  if (!student) return <AppShell><PageHeader title="Parent portal" /></AppShell>;
+  useEffect(() => {
+    if (students.length === 0) return;
+    if (!studentId || !students.some((s) => s.id === studentId)) {
+      setStudentId(students[0]!.id);
+    }
+  }, [students, studentId]);
 
-  const batch = store.batches.find((b) => b.id === student.batchId);
-  const teacher = store.teachers.find((t) => t.id === batch?.teacherId);
-  const attendance = attendancePct(store.attendance, student.id);
-  const month = TODAY.slice(0, 7);
-  const paid = store.feePayments.some((p) => p.studentId === student.id && p.month === month);
-  const homework = store.homework
-    .filter((h) => h.batchId === student.batchId)
-    .slice(0, 4);
-  const results = store.exams
-    .filter((e) => e.batchId === student.batchId)
-    .map((e) => ({ exam: e, result: e.results.find((r) => r.studentId === student.id) }))
-    .filter((x) => x.result?.marks != null)
-    .slice(0, 4);
+  const { data: previewData } = useParentPreview(studentId);
+  const preview = previewData as ParentPreview | undefined;
+  const student = students.find((s) => s.id === studentId) ?? students[0];
+  const parentAccount = parents.find(
+    (p) => p.studentIds.includes(studentId) || p.students.some((s) => s.id === studentId),
+  );
+
+  if (studentsLoading && !student) {
+    return (
+      <AppShell>
+        <Skeleton className="h-10 w-64" />
+        <Skeleton className="h-96" />
+      </AppShell>
+    );
+  }
+
+  if (!student) {
+    return (
+      <AppShell>
+        <PageHeader
+          title="Parents"
+          description="Preview what a parent sees on their phone, send portal invites, and publish announcements. Add a student first — parent accounts are linked from the student record."
+          actions={
+            <Button asChild>
+              <Link to="/students">Go to students</Link>
+            </Button>
+          }
+        />
+        <AnnouncementComposer />
+      </AppShell>
+    );
+  }
+
+  const name = preview?.student.name ?? student.name;
+  const className = preview?.student.className ?? student.className;
+  const batchName = preview?.batchName ?? student.batchName ?? "No batch";
+  const parentName = preview?.student.parentName ?? parentAccount?.name ?? student.parentName;
+  const attendance = preview?.attendancePercent ?? 0;
+  const monthlyFee = preview?.student.monthlyFee ?? student.monthlyFee;
+  const paid = preview?.feePaid ?? false;
+  const homework = preview?.homework ?? [];
+  const results = preview?.results ?? [];
+  const teacherName = preview?.teacherName ?? "—";
+  const teacherPhone = preview?.teacherPhone ?? "";
+
+  const sendInvite = () => {
+    if (!parentAccount) {
+      toast.error("No parent account is linked to this student");
+      return;
+    }
+    inviteParent.mutate(parentAccount.id, {
+      onSuccess: () => toast.success("Portal invite sent to parent on WhatsApp"),
+    });
+  };
 
   return (
     <AppShell>
       <PageHeader
-        title="Parent portal preview"
-        description="This is the read-only view parents get on their phone. Everything you record here reaches them instantly in the parent portal."
+        title="Parents"
+        description="Staff preview of the parent phone view for a selected student. Send a portal invite, or publish announcements that appear in every parent's feed. This is not the parent login — that is /parent."
         actions={
           <div className="flex flex-wrap gap-2">
-            <Button variant="outline" onClick={() => toast.success("Portal invite sent to parent on WhatsApp")}>
-              <MessageSquare className="mr-2 size-4" /> Send invite
+            <Button variant="outline" onClick={sendInvite} loading={inviteParent.isPending}>
+              <MessageSquare className="mr-2 size-4" /> {inviteParent.isPending ? "Sending…" : "Send invite"}
             </Button>
             <Button asChild>
               <Link to="/parent/login" target="_blank">
@@ -77,13 +143,13 @@ function ParentsPage() {
           <Select value={studentId} onValueChange={setStudentId}>
             <SelectTrigger><SelectValue placeholder="Select student" /></SelectTrigger>
             <SelectContent>
-              {store.students.map((s) => (
+              {students.map((s) => (
                 <SelectItem key={s.id} value={s.id}>{s.name} — {s.className}</SelectItem>
               ))}
             </SelectContent>
           </Select>
           <p className="flex items-center gap-2 text-xs text-muted-foreground">
-            <Smartphone className="size-4" /> Previewing as {student.parentName}
+            <Smartphone className="size-4" /> Previewing as {parentName}
           </p>
         </div>
       </SectionCard>
@@ -94,12 +160,12 @@ function ParentsPage() {
           <div className="space-y-4">
             <div className="flex items-center gap-3 rounded-2xl bg-primary-soft p-3">
               <span className="grid size-11 place-items-center rounded-full bg-primary text-sm font-bold text-primary-foreground">
-                {initials(student.name)}
+                {initials(name)}
               </span>
               <div className="min-w-0">
-                <p className="truncate font-display text-sm font-semibold">{student.name}</p>
+                <p className="truncate font-display text-sm font-semibold">{name}</p>
                 <p className="truncate text-xs text-muted-foreground">
-                  {student.className} · {batch?.name ?? "No batch"}
+                  {className} · {batchName}
                 </p>
               </div>
             </div>
@@ -114,9 +180,9 @@ function ParentsPage() {
               </div>
               <div className="rounded-2xl border border-border p-3">
                 <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                  <Wallet className="size-3.5" /> Fees {formatDate(`${month}-01`).slice(3)}
+                  <Wallet className="size-3.5" /> Fees {formatDate(`${CURRENT_MONTH}-01`).slice(3)}
                 </p>
-                <p className="mt-1 font-display text-xl font-semibold">{inr(student.monthlyFee)}</p>
+                <p className="mt-1 font-display text-xl font-semibold">{inr(monthlyFee)}</p>
                 <div className="mt-2"><StatusBadge status={paid ? "paid" : "pending"} /></div>
               </div>
             </div>
@@ -131,7 +197,7 @@ function ParentsPage() {
                     <li key={h.id} className="rounded-xl border border-border p-2.5">
                       <p className="text-sm font-medium">{h.title}</p>
                       <p className="mt-0.5 flex items-center justify-between text-xs text-muted-foreground">
-                        <span>{h.subject} · due {formatDate(h.dueDate)}</span>
+                        <span>{h.subject} · due {formatDate(String(h.dueDate).slice(0, 10))}</span>
                         <StatusBadge status={h.status} />
                       </p>
                     </li>
@@ -148,16 +214,16 @@ function ParentsPage() {
               </p>
               <ul className="space-y-2">
                 {results.length ? (
-                  results.map(({ exam, result }) => (
-                    <li key={exam.id} className="flex items-center justify-between gap-2 rounded-xl border border-border p-2.5 text-sm">
+                  results.map((result) => (
+                    <li key={result.examId} className="flex items-center justify-between gap-2 rounded-xl border border-border p-2.5 text-sm">
                       <span className="min-w-0">
-                        <span className="block truncate font-medium">{exam.name}</span>
+                        <span className="block truncate font-medium">{result.name}</span>
                         <span className="text-xs text-muted-foreground">
-                          class avg {pct(examStats(exam).averagePct)}
+                          class avg {pct(result.classAvg)}
                         </span>
                       </span>
                       <span className="font-display font-semibold">
-                        {result!.marks}/{exam.maxMarks}
+                        {result.marks}/{result.maxMarks}
                       </span>
                     </li>
                   ))
@@ -171,7 +237,7 @@ function ParentsPage() {
               <p className="flex items-center gap-1.5 font-semibold text-foreground">
                 <UserRound className="size-3.5" /> Class teacher
               </p>
-              <p className="mt-1">{teacher?.name ?? "—"} · {teacher?.phone ?? ""}</p>
+              <p className="mt-1">{teacherName} · {teacherPhone}</p>
             </div>
           </div>
         </div>
@@ -186,7 +252,10 @@ function ParentsPage() {
 }
 
 function AnnouncementComposer() {
-  const store = useStore();
+  const { data: announcements = [] } = useAnnouncements();
+  const { data: batches = [] } = useBatches();
+  const createAnnouncement = useCreateAnnouncement();
+  const deleteAnnouncement = useDeleteAnnouncement();
   const [title, setTitle] = useState("");
   const [body, setBody] = useState("");
   const [audience, setAudience] = useState("all");
@@ -213,7 +282,7 @@ function AnnouncementComposer() {
               <SelectTrigger><SelectValue /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">All parents</SelectItem>
-                {store.batches.map((b) => (
+                {batches.map((b) => (
                   <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>
                 ))}
               </SelectContent>
@@ -221,29 +290,53 @@ function AnnouncementComposer() {
           </div>
           <Button
             disabled={!title.trim() || !body.trim()}
+            loading={createAnnouncement.isPending}
             onClick={() => {
-              store.addAnnouncement({ title: title.trim(), body: body.trim(), audience, pinned: false });
-              setTitle("");
-              setBody("");
-              toast.success("Announcement published to the parent portal");
+              createAnnouncement.mutate(
+                { title: title.trim(), body: body.trim(), audience, pinned: false },
+                {
+                  onSuccess: () => {
+                    setTitle("");
+                    setBody("");
+                    toast.success("Announcement published to the parent portal");
+                  },
+                },
+              );
             }}
           >
-            <Send className="mr-2 size-4" /> Publish to parents
+            <Send className="mr-2 size-4" /> {createAnnouncement.isPending ? "Publishing…" : "Publish to parents"}
           </Button>
         </div>
 
         <ul className="space-y-2">
-          {store.announcements.slice(0, 5).map((a) => (
+          {announcements.slice(0, 5).map((a) => (
             <li key={a.id} className="rounded-xl border border-border p-3">
               <div className="flex items-start justify-between gap-2">
                 <p className="flex items-center gap-1.5 text-sm font-semibold">
                   <Megaphone className="size-3.5 text-primary" /> {a.title}
                 </p>
-                <span className="shrink-0 text-xs text-muted-foreground">{formatDate(a.createdAt)}</span>
+                <div className="flex shrink-0 items-center gap-1">
+                  <span className="text-xs text-muted-foreground">{formatDate(a.createdAt)}</span>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    className="size-7 text-muted-foreground hover:text-destructive"
+                    disabled={deleteAnnouncement.isPending}
+                    loading={deleteAnnouncement.isPending}
+                    onClick={() =>
+                      deleteAnnouncement.mutate(a.id, {
+                        onSuccess: () => toast.success("Announcement removed"),
+                      })
+                    }
+                  >
+                    <Trash2 className="size-3.5" />
+                  </Button>
+                </div>
               </div>
               <p className="mt-1 text-xs text-muted-foreground">{a.body}</p>
               <p className="mt-1 text-[11px] text-muted-foreground">
-                To {a.audience === "all" ? "all parents" : store.batches.find((b) => b.id === a.audience)?.name ?? a.audience}
+                To {a.audience === "all" ? "all parents" : batches.find((b) => b.id === a.audience)?.name ?? a.audience}
               </p>
             </li>
           ))}

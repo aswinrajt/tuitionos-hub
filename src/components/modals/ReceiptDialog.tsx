@@ -2,7 +2,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { CheckCircle2, Printer, Share2 } from "lucide-react";
-import { useStore } from "@/store/tuition-store";
+import { useSettings, useStudents } from "@/hooks/api";
 import { formatDate, formatMonth, inr } from "@/lib/format";
 import type { FeePayment } from "@/data/types";
 import { toast } from "sonner";
@@ -14,9 +14,9 @@ export function ReceiptDialog({
   payment: FeePayment | null;
   onOpenChange: (open: boolean) => void;
 }) {
-  const { students, settings, batches } = useStore();
+  const { data: settings } = useSettings();
+  const { data: students = [] } = useStudents();
   const student = students.find((s) => s.id === payment?.studentId);
-  const batch = batches.find((b) => b.id === student?.batchId);
 
   return (
     <Dialog open={!!payment} onOpenChange={onOpenChange}>
@@ -24,7 +24,7 @@ export function ReceiptDialog({
         <DialogHeader>
           <DialogTitle>Payment receipt</DialogTitle>
         </DialogHeader>
-        {payment && student ? (
+        {payment && settings && student ? (
           <div className="space-y-4">
             <div className="flex items-center gap-2 rounded-xl bg-success-soft px-4 py-3 text-success">
               <CheckCircle2 className="size-5" />
@@ -49,7 +49,7 @@ export function ReceiptDialog({
               <dl className="grid gap-3 text-sm sm:grid-cols-2">
                 {[
                   ["Student", student.name],
-                  ["Class / Batch", `${student.className} · ${batch?.name ?? "—"}`],
+                  ["Class / Batch", `${student.className} · ${student.batchName ?? "—"}`],
                   ["Parent", student.parentName],
                   ["Fee month", formatMonth(payment.month)],
                   ["Payment mode", payment.method],

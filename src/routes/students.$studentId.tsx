@@ -14,7 +14,6 @@ import {
   Wallet,
 } from "lucide-react";
 import { AppShell } from "@/components/layout/AppShell";
-import { PageHeader } from "@/components/common/PageHeader";
 import { SectionCard } from "@/components/common/SectionCard";
 import { StatCard } from "@/components/common/StatCard";
 import { StatusBadge } from "@/components/common/StatusBadge";
@@ -24,14 +23,19 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { Separator } from "@/components/ui/separator";
+import { Skeleton } from "@/components/ui/skeleton";
 import { StudentFormModal } from "@/components/modals/StudentFormModal";
 import { RecordPaymentModal } from "@/components/modals/RecordPaymentModal";
 import { ReceiptDialog } from "@/components/modals/ReceiptDialog";
-import { useStore } from "@/store/tuition-store";
-import { CURRENT_MONTH } from "@/data/mock";
-import { attendancePct, studentFeeStatus } from "@/lib/selectors";
-import { formatDate, formatMonth, formatTime, inr, initials, pct } from "@/lib/format";
-import type { FeePayment } from "@/data/types";
+import {
+  useDeleteStudent,
+  useRemindFee,
+  useSettings,
+  useStudent,
+  type StudentRow,
+} from "@/hooks/api";
+import { CURRENT_MONTH, formatDate, formatMonth, formatTime, inr, initials, pct } from "@/lib/format";
+import type { FeePayment, Homework } from "@/data/types";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/students/$studentId")({
@@ -52,18 +56,67 @@ export const Route = createFileRoute("/students/$studentId")({
   component: StudentProfilePage,
 });
 
+type StudentDetail = {
+  student: StudentRow;
+  batch: {
+    id: string;
+    name: string;
+    days: string[];
+    startTime: string;
+    endTime: string;
+    room: string;
+    teacherName: string;
+  } | null;
+  attendance: {
+    percent: number;
+    presentCount: number;
+    total: number;
+    recent: { id: string; date: string; mark: string }[];
+  };
+  payments: FeePayment[];
+  feesPaidTotal: number;
+  homework: Pick<Homework, "id" | "title" | "subject" | "dueDate" | "status">[];
+  examResults: {
+    examId: string;
+    name: string;
+    subject: string;
+    date: string;
+    marks: number | null;
+    maxMarks: number;
+  }[];
+  averageScorePercent?: number;
+};
+
 function StudentProfilePage() {
   const { studentId } = useParams({ from: "/students/$studentId" });
-  const store = useStore();
   const navigate = useNavigate();
+  const { data, isLoading, isError } = useStudent(studentId);
+  const { data: settings } = useSettings();
+  const deleteStudent = useDeleteStudent();
+  const remindFee = useRemindFee();
   const [editOpen, setEditOpen] = useState(false);
   const [payOpen, setPayOpen] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [receipt, setReceipt] = useState<FeePayment | null>(null);
 
-  const student = store.students.find((s) => s.id === studentId);
+  const detail = data as unknown as StudentDetail | undefined;
 
-  if (!student) {
+  if (isLoading) {
+    return (
+      <AppShell>
+        <Skeleton className="h-8 w-40" />
+        <Skeleton className="h-40 rounded-2xl" />
+        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+          {Array.from({ length: 4 }).map((_, i) => (
+            <Skeleton key={i} className="h-24" />
+          ))}
+        </div>
+        <Skeleton className="h-96" />
+      </AppShell>
+    );
+  }
+
+  if (isError || !detail?.student) {
     return (
       <AppShell>
         <EmptyState
@@ -78,21 +131,20 @@ function StudentProfilePage() {
     );
   }
 
-  const batch = store.batches.find((b) => b.id === student.batchId);
-  const teacher = store.teachers.find((t) => t.id === batch?.teacherId);
-  const attendance = attendancePct(store.attendance, student.id);
-  const records = store.attendance.filter((a) => a.entries.some((e) => e.studentId === student.id));
-  const presentCount = records.filter(
-    (a) => a.entries.find((e) => e.studentId === student.id)?.mark === "present",
-  ).length;
-  const payments = store.feePayments
-    .filter((p) => p.studentId === student.id)
-    .sort((a, b) => b.month.localeCompare(a.month));
-  const feeStatus = studentFeeStatus(store.feePayments, student, CURRENT_MONTH, store.settings.feeDueDay);
-  const homework = store.homework.filter((h) => h.batchId === student.batchId).slice(0, 5);
-  const results = store.exams
-    .filter((e) => e.results.some((r) => r.studentId === student.id))
-    .map((e) => ({ exam: e, marks: e.results.find((r) => r.studentId === student.id)?.marks ?? null }));
+  const { student, batch } = detail;
+  const attendance = detail.attendance?.percent ?? student.attendancePercent ?? 0;
+  const presentCount = detail.attendance?.presentCount ?? 0;
+  const records = detail.attendance?.recent ?? [];
+  const payments = detail.payments ?? [];
+  const feeStatus = student.feeStatus;
+  const homework = detail.homework ?? [];
+  const results = detail.examResults ?? [];
+  const feesPaidTotal = detail.feesPaidTotal ?? payments.reduce((s, p) => s + p.amount, 0);
+  const averageScore =
+    results.length
+      ? (detail.averageScorePercent ??
+        results.reduce((sum, r) => sum + ((r.marks ?? 0) / r.maxMarks) * 100, 0) / results.length)
+      : null;
 
   return (
     <AppShell>
@@ -110,7 +162,7 @@ function StudentProfilePage() {
             <div>
               <h1 className="font-display text-2xl font-semibold">{student.name}</h1>
               <p className="text-sm text-muted-foreground">
-                {student.className} · {batch?.name ?? "No batch"} · Joined {formatDate(student.joiningDate)}
+                {student.className} · {batch?.name ?? student.batchName ?? "No batch"} · Joined {formatDate(student.joiningDate)}
               </p>
               <div className="mt-2 flex flex-wrap items-center gap-2">
                 <StatusBadge status={student.status} />
@@ -133,19 +185,12 @@ function StudentProfilePage() {
       </div>
 
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        <StatCard label="Attendance" value={attendance ? pct(attendance) : "—"} hint={`${presentCount} of ${records.length} classes`} icon={CalendarCheck} tone={attendance >= 75 ? "success" : "warning"} />
-        <StatCard label="Monthly fee" value={inr(student.monthlyFee)} hint={`Due on day ${store.settings.feeDueDay}`} icon={Wallet} />
-        <StatCard label="Fees paid" value={inr(payments.reduce((s, p) => s + p.amount, 0), { compact: true })} hint={`${payments.length} receipts`} icon={ClipboardList} tone="info" />
+        <StatCard label="Attendance" value={attendance ? pct(attendance) : "—"} hint={`${presentCount} of ${detail.attendance?.total ?? records.length} classes`} icon={CalendarCheck} tone={attendance >= 75 ? "success" : "warning"} />
+        <StatCard label="Monthly fee" value={inr(student.monthlyFee)} hint={`Due on day ${settings?.feeDueDay ?? 5}`} icon={Wallet} />
+        <StatCard label="Fees paid" value={inr(feesPaidTotal, { compact: true })} hint={`${payments.length} receipts`} icon={ClipboardList} tone="info" />
         <StatCard
           label="Average score"
-          value={
-            results.length
-              ? pct(
-                  results.reduce((sum, r) => sum + ((r.marks ?? 0) / r.exam.maxMarks) * 100, 0) /
-                    results.length,
-                )
-              : "—"
-          }
+          value={averageScore != null ? pct(averageScore) : "—"}
           hint={`${results.length} exams`}
           icon={BookOpen}
           tone="accent"
@@ -161,8 +206,8 @@ function StudentProfilePage() {
               ["Parent phone", student.parentPhone],
               ["Gender", student.gender],
               ["Class", student.className],
-              ["Batch", batch?.name ?? "—"],
-              ["Teacher", teacher?.name ?? "—"],
+              ["Batch", batch?.name ?? student.batchName ?? "—"],
+              ["Teacher", batch?.teacherName ?? "—"],
               ["Joining date", formatDate(student.joiningDate)],
             ].map(([label, value]) => (
               <div key={label} className="flex items-start justify-between gap-4">
@@ -186,8 +231,16 @@ function StudentProfilePage() {
             <Button variant="outline" size="sm" className="flex-1" onClick={() => toast.success(`Calling ${student.parentName}…`)}>
               <Phone className="mr-2 size-4" /> Call parent
             </Button>
-            <Button variant="outline" size="sm" className="flex-1" onClick={() => toast.success("Fee reminder sent to parent")}>
-              <Mail className="mr-2 size-4" /> Remind
+            <Button
+              variant="outline"
+              size="sm"
+              className="flex-1"
+              loading={remindFee.isPending}
+              onClick={() =>
+                remindFee.mutate(student.id, { onSuccess: () => toast.success("reminder sent") })
+              }
+            >
+              <Mail className="mr-2 size-4" /> {remindFee.isPending ? "Sending…" : "Remind"}
             </Button>
           </div>
         </SectionCard>
@@ -196,25 +249,22 @@ function StudentProfilePage() {
           <SectionCard title="Attendance summary" description="Across all marked classes">
             <div className="space-y-3">
               <div className="flex items-center justify-between text-sm">
-                <span className="text-muted-foreground">Present {presentCount} / {records.length}</span>
+                <span className="text-muted-foreground">Present {presentCount} / {detail.attendance?.total ?? records.length}</span>
                 <span className="font-semibold">{attendance ? pct(attendance) : "—"}</span>
               </div>
               <Progress value={attendance} />
               <div className="flex flex-wrap gap-1.5 pt-1">
-                {records.slice(-24).map((a) => {
-                  const mark = a.entries.find((e) => e.studentId === student.id)?.mark;
-                  return (
-                    <span
-                      key={a.id}
-                      title={`${formatDate(a.date)} · ${mark}`}
-                      className={
-                        mark === "present"
-                          ? "size-6 rounded-md bg-success-soft"
-                          : "size-6 rounded-md bg-destructive-soft"
-                      }
-                    />
-                  );
-                })}
+                {records.map((a) => (
+                  <span
+                    key={a.id}
+                    title={`${formatDate(a.date)} · ${a.mark}`}
+                    className={
+                      a.mark === "present"
+                        ? "size-6 rounded-md bg-success-soft"
+                        : "size-6 rounded-md bg-destructive-soft"
+                    }
+                  />
+                ))}
               </div>
             </div>
           </SectionCard>
@@ -268,17 +318,17 @@ function StudentProfilePage() {
             <SectionCard title="Recent exam results" bodyClassName="p-0">
               {results.length ? (
                 <ul className="divide-y divide-border">
-                  {results.map(({ exam, marks }) => (
-                    <li key={exam.id} className="px-4 py-3">
+                  {results.map((r) => (
+                    <li key={r.examId} className="px-4 py-3">
                       <div className="flex items-start justify-between gap-2">
-                        <p className="text-sm font-medium">{exam.name}</p>
+                        <p className="text-sm font-medium">{r.name}</p>
                         <span className="text-sm font-semibold text-primary">
-                          {marks ?? "—"}/{exam.maxMarks}
+                          {r.marks ?? "—"}/{r.maxMarks}
                         </span>
                       </div>
                       <p className="text-xs text-muted-foreground">
-                        {exam.subject} · {formatDate(exam.date)} ·{" "}
-                        {marks !== null ? pct((marks / exam.maxMarks) * 100) : "not graded"}
+                        {r.subject} · {formatDate(r.date)} ·{" "}
+                        {r.marks !== null ? pct((r.marks / r.maxMarks) * 100) : "not graded"}
                       </p>
                     </li>
                   ))}
@@ -317,11 +367,16 @@ function StudentProfilePage() {
         title={`Delete ${student.name}?`}
         description="The student will be removed from all batches and lists."
         confirmLabel="Delete student"
+        pendingLabel="Deleting…"
         destructive
+        pending={deleteStudent.isPending}
         onConfirm={() => {
-          store.deleteStudent(student.id);
-          toast.success("Student deleted");
-          navigate({ to: "/students" });
+          deleteStudent.mutate(student.id, {
+            onSuccess: () => {
+              toast.success("Student deleted");
+              navigate({ to: "/students" });
+            },
+          });
         }}
       />
     </AppShell>

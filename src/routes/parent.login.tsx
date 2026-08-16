@@ -1,13 +1,15 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
+import { useQueryClient } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
-import { ArrowLeft, GraduationCap, HeartHandshake, KeyRound, Loader2, ShieldCheck, Smartphone } from "lucide-react";
+import { ArrowLeft, GraduationCap, HeartHandshake, KeyRound, ShieldCheck, Smartphone } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useParentAuth } from "@/store/parent-auth";
-import { useStore } from "@/store/tuition-store";
-import { DEMO_PARENT_OTP } from "@/data/mock";
+import { api, ApiError } from "@/lib/api";
+import { qk } from "@/lib/query-keys";
+import type { ParentMeData } from "@/hooks/api";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/parent/login")({
@@ -26,11 +28,17 @@ export const Route = createFileRoute("/parent/login")({
 });
 
 const DEMO_PHONE = "+91 98765 43210";
+const DEMO_OTP = "1234";
+
+type AuthPayload = {
+  parent: { id: string; name: string; phone: string; email: string };
+  accessToken: string;
+};
 
 function ParentLoginPage() {
   const { parent, login, setActiveChildId } = useParentAuth();
-  const store = useStore();
   const navigate = useNavigate();
+  const qc = useQueryClient();
   const [mode, setMode] = useState<"otp" | "password">("otp");
   const [contact, setContact] = useState("");
   const [password, setPassword] = useState("");
@@ -44,74 +52,115 @@ function ParentLoginPage() {
     if (parent) navigate({ to: "/parent", replace: true });
   }, [parent, navigate]);
 
-  const findAccount = (value: string) => {
-    const needle = value.replace(/\s|-/g, "").toLowerCase();
-    return store.parentAccounts.find(
-      (p) =>
-        p.phone.replace(/\s|-/g, "").toLowerCase().endsWith(needle.slice(-10)) ||
-        p.email.toLowerCase() === needle,
-    );
-  };
+  const apiMessage = (err: unknown, fallback: string) =>
+    err instanceof ApiError ? err.message : fallback;
 
-  const signIn = (value: string) => {
-    const account = findAccount(value);
-    if (!account) {
-      setError("We could not find this number or email. Please check with the centre.");
-      return;
-    }
-    login({ parentId: account.id, name: account.name, contact: account.phone });
-    if (account.studentIds[0]) setActiveChildId(account.studentIds[0]);
-    toast.success(`Welcome, ${account.name}`);
+  const completeLogin = async (data: AuthPayload) => {
+    login(
+      { parentId: data.parent.id, name: data.parent.name, contact: data.parent.phone },
+      data.accessToken,
+    );
+    const me = await api<ParentMeData>("/v1/parent/auth/me");
+    qc.setQueryData(qk.parentMe, me.data);
+    if (me.data.children[0]?.id) setActiveChildId(me.data.children[0].id);
+    toast.success(`Welcome, ${data.parent.name}`);
     navigate({ to: "/parent", replace: true });
   };
 
-  const sendOtp = () => {
+  const sendOtp = async () => {
     setError("");
     if (!contact.trim()) {
       setError("Please enter your mobile number or email.");
       return;
     }
-    if (!findAccount(contact)) {
-      setError("This number is not registered. Please contact the tuition centre.");
-      return;
-    }
     setBusy(true);
-    setTimeout(() => {
-      setBusy(false);
+    try {
+      await api("/v1/parent/auth/otp/send", {
+        method: "POST",
+        body: JSON.stringify({ contact: contact.trim() }),
+      });
       setOtpSent(true);
-      toast.success(`OTP sent. Use ${DEMO_PARENT_OTP} for this demo.`);
-    }, 700);
+      toast.success("OTP sent.");
+    } catch (err) {
+      setError(apiMessage(err, "Could not send OTP."));
+    } finally {
+      setBusy(false);
+    }
   };
 
-  const verifyOtp = () => {
+  const verifyOtp = async () => {
     setError("");
-    if (otp.trim() !== DEMO_PARENT_OTP) {
-      setError("That OTP is not correct. Please try again.");
+    if (otp.trim().length < 4) {
+      setError("Enter the 4-digit OTP.");
       return;
     }
     setBusy(true);
-    setTimeout(() => {
+    try {
+      const { data } = await api<AuthPayload>("/v1/parent/auth/otp/verify", {
+        method: "POST",
+        body: JSON.stringify({ contact: contact.trim(), otp: otp.trim() }),
+      });
+      await completeLogin(data);
+    } catch (err) {
+      setError(apiMessage(err, "Could not verify OTP."));
+    } finally {
       setBusy(false);
-      signIn(contact);
-    }, 500);
+    }
   };
 
-  const signInWithPassword = () => {
+  const signInWithPassword = async () => {
     setError("");
     if (!contact.trim() || password.length < 4) {
       setError("Enter your mobile/email and a password of at least 4 characters.");
       return;
     }
     setBusy(true);
-    setTimeout(() => {
+    try {
+      const { data } = await api<AuthPayload>("/v1/parent/auth/login", {
+        method: "POST",
+        body: JSON.stringify({ contact: contact.trim(), password }),
+      });
+      await completeLogin(data);
+    } catch (err) {
+      setError(apiMessage(err, "Could not sign in."));
+    } finally {
       setBusy(false);
-      signIn(contact);
-    }, 600);
+    }
   };
 
-  const demoLogin = () => {
+  const demoLogin = async () => {
     setContact(DEMO_PHONE);
-    signIn(DEMO_PHONE);
+    setError("");
+    setBusy(true);
+    try {
+      const { data } = await api<AuthPayload>("/v1/parent/auth/demo", { method: "POST" });
+      await completeLogin(data);
+    } catch (err) {
+      setError(apiMessage(err, "Could not start the demo."));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const sendReset = async () => {
+    setError("");
+    if (!contact.trim()) {
+      setError("Please enter your mobile number or email.");
+      return;
+    }
+    setBusy(true);
+    try {
+      await api("/v1/parent/auth/forgot-password", {
+        method: "POST",
+        body: JSON.stringify({ contact: contact.trim() }),
+      });
+      toast.success("Reset instructions sent to your registered mobile.");
+      setForgotOpen(false);
+    } catch (err) {
+      setError(apiMessage(err, "Could not send reset instructions."));
+    } finally {
+      setBusy(false);
+    }
   };
 
   return (
@@ -121,9 +170,7 @@ function ParentLoginPage() {
           <span className="grid size-12 place-items-center rounded-2xl bg-primary-foreground/15">
             <GraduationCap className="size-6" />
           </span>
-          <h1 className="mt-4 font-display text-2xl font-semibold">
-            {store.settings.centreName} — Parent Portal
-          </h1>
+          <h1 className="mt-4 font-display text-2xl font-semibold">Parent Portal</h1>
           <p className="mt-2 text-sm text-primary-foreground/85">
             Follow your child's attendance, fees, homework and results in one simple place.
           </p>
@@ -163,19 +210,8 @@ function ParentLoginPage() {
                 />
               </div>
               {error ? <p className="text-sm font-medium text-destructive">{error}</p> : null}
-              <Button
-                className="h-12 w-full text-base"
-                onClick={() => {
-                  if (!findAccount(contact)) {
-                    setError("This number is not registered with the centre.");
-                    return;
-                  }
-                  setError("");
-                  toast.success("Reset instructions sent to your registered mobile.");
-                  setForgotOpen(false);
-                }}
-              >
-                Send reset link
+              <Button className="h-12 w-full text-base" loading={busy} onClick={() => void sendReset()}>
+                {busy ? "Sending…" : "Send reset link"}
               </Button>
             </div>
           ) : (
@@ -215,7 +251,7 @@ function ParentLoginPage() {
                         onChange={(e) => setOtp(e.target.value.replace(/\D/g, ""))}
                         placeholder="••••"
                       />
-                      <button className="text-xs font-medium text-primary" onClick={sendOtp}>
+                      <button className="text-xs font-medium text-primary" onClick={() => void sendOtp()}>
                         Resend OTP
                       </button>
                     </div>
@@ -223,11 +259,11 @@ function ParentLoginPage() {
                   {error ? <p className="text-sm font-medium text-destructive">{error}</p> : null}
                   <Button
                     className="h-12 w-full text-base"
-                    disabled={busy}
-                    onClick={otpSent ? verifyOtp : sendOtp}
+                    loading={busy}
+                    onClick={() => void (otpSent ? verifyOtp() : sendOtp())}
                   >
-                    {busy ? <Loader2 className="mr-2 size-4 animate-spin" /> : <Smartphone className="mr-2 size-4" />}
-                    {otpSent ? "Verify & sign in" : "Send OTP"}
+                    <Smartphone className="mr-2 size-4" />
+                    {busy ? (otpSent ? "Verifying…" : "Sending OTP…") : otpSent ? "Verify & sign in" : "Send OTP"}
                   </Button>
                 </TabsContent>
 
@@ -254,9 +290,9 @@ function ParentLoginPage() {
                     />
                   </div>
                   {error ? <p className="text-sm font-medium text-destructive">{error}</p> : null}
-                  <Button className="h-12 w-full text-base" disabled={busy} onClick={signInWithPassword}>
-                    {busy ? <Loader2 className="mr-2 size-4 animate-spin" /> : <KeyRound className="mr-2 size-4" />}
-                    Sign in
+                  <Button className="h-12 w-full text-base" loading={busy} onClick={() => void signInWithPassword()}>
+                    <KeyRound className="mr-2 size-4" />
+                    {busy ? "Signing in…" : "Sign in"}
                   </Button>
                 </TabsContent>
               </Tabs>
@@ -265,7 +301,7 @@ function ParentLoginPage() {
                 <button className="font-medium text-primary" onClick={() => { setForgotOpen(true); setError(""); }}>
                   Forgot password?
                 </button>
-                <button className="font-medium text-muted-foreground" onClick={demoLogin}>
+                <button className="font-medium text-muted-foreground" disabled={busy} onClick={() => void demoLogin()}>
                   Use demo parent
                 </button>
               </div>
@@ -275,7 +311,7 @@ function ParentLoginPage() {
 
         <div className="mt-6 rounded-2xl bg-background p-4 text-sm text-muted-foreground">
           <p className="font-medium text-foreground">Demo login</p>
-          <p className="mt-1">Mobile {DEMO_PHONE} · OTP {DEMO_PARENT_OTP}</p>
+          <p className="mt-1">Mobile {DEMO_PHONE} · OTP {DEMO_OTP}</p>
         </div>
 
         <p className="mt-auto pt-6 text-center text-xs text-muted-foreground">

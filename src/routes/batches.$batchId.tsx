@@ -9,13 +9,12 @@ import { EmptyState } from "@/components/common/EmptyState";
 import { DataTable, type Column } from "@/components/common/DataTable";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Skeleton } from "@/components/ui/skeleton";
 import { BatchFormModal } from "@/components/modals/BatchFormModal";
 import { HomeworkFormModal } from "@/components/modals/HomeworkFormModal";
-import { useStore } from "@/store/tuition-store";
-import { TODAY } from "@/data/mock";
-import { attendancePct, batchAttendancePct, upcomingClasses } from "@/lib/selectors";
+import { useBatch, type BatchRow } from "@/hooks/api";
 import { formatDate, formatDateShort, formatTime, inr, initials, pct } from "@/lib/format";
-import type { Student } from "@/data/types";
+import type { Homework, Student } from "@/data/types";
 
 export const Route = createFileRoute("/batches/$batchId")({
   head: () => ({
@@ -32,16 +31,44 @@ export const Route = createFileRoute("/batches/$batchId")({
   component: BatchDetailPage,
 });
 
+type RosterStudent = Pick<Student, "id" | "name" | "phone" | "parentName" | "monthlyFee" | "status"> & {
+  attendancePercent?: number;
+};
+
+type BatchDetail = BatchRow & {
+  isToday?: boolean;
+  upcoming?: { date: string; startTime: string; endTime: string }[];
+  roster?: RosterStudent[];
+  students?: RosterStudent[];
+  homework?: Pick<Homework, "id" | "title" | "dueDate" | "status">[];
+  exams?: { id: string; name: string; subject: string; date: string; maxMarks: number }[];
+};
+
 function BatchDetailPage() {
   const { batchId } = useParams({ from: "/batches/$batchId" });
-  const store = useStore();
   const navigate = useNavigate();
+  const { data, isLoading, isError } = useBatch(batchId);
   const [editOpen, setEditOpen] = useState(false);
   const [hwOpen, setHwOpen] = useState(false);
 
-  const batch = store.batches.find((b) => b.id === batchId);
+  const batch = data as BatchDetail | undefined;
 
-  if (!batch) {
+  if (isLoading) {
+    return (
+      <AppShell>
+        <Skeleton className="h-8 w-40" />
+        <Skeleton className="h-32 rounded-2xl" />
+        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+          {Array.from({ length: 4 }).map((_, i) => (
+            <Skeleton key={i} className="h-24" />
+          ))}
+        </div>
+        <Skeleton className="h-72" />
+      </AppShell>
+    );
+  }
+
+  if (isError || !batch) {
     return (
       <AppShell>
         <EmptyState
@@ -54,16 +81,13 @@ function BatchDetailPage() {
     );
   }
 
-  const teacher = store.teachers.find((t) => t.id === batch.teacherId);
-  const roster = store.students.filter((s) => s.batchId === batch.id);
-  const homework = store.homework.filter((h) => h.batchId === batch.id);
-  const exams = store.exams.filter((e) => e.batchId === batch.id);
-  const upcoming = upcomingClasses([batch], 7).slice(0, 5);
-  const isToday = batch.days.includes(
-    ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"][(new Date(TODAY).getDay() + 6) % 7]!,
-  );
+  const roster = batch.roster ?? batch.students ?? [];
+  const homework = batch.homework ?? [];
+  const exams = batch.exams ?? [];
+  const upcoming = (batch.upcoming ?? []).slice(0, 5);
+  const isToday = Boolean(batch.isToday);
 
-  const columns: Column<Student>[] = [
+  const columns: Column<RosterStudent>[] = [
     {
       key: "name",
       header: "Student",
@@ -84,7 +108,7 @@ function BatchDetailPage() {
     {
       key: "attendance",
       header: "Attendance",
-      cell: (s) => pct(attendancePct(store.attendance, s.id)),
+      cell: (s) => (s.attendancePercent != null ? pct(s.attendancePercent) : "—"),
     },
     { key: "status", header: "Status", cell: (s) => <StatusBadge status={s.status} /> },
   ];
@@ -103,7 +127,7 @@ function BatchDetailPage() {
             {isToday ? <Badge className="bg-accent-soft text-accent-foreground">Class today</Badge> : null}
           </div>
           <p className="mt-1 text-sm text-muted-foreground">
-            {batch.className} · {batch.subject} · {teacher?.name ?? "Unassigned"} · {batch.room}
+            {batch.className} · {batch.subject} · {batch.teacherName || "Unassigned"} · {batch.room}
           </p>
           <p className="text-sm text-muted-foreground">
             {batch.days.join(", ")} · {formatTime(batch.startTime)} – {formatTime(batch.endTime)}
@@ -124,9 +148,9 @@ function BatchDetailPage() {
 
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <StatCard label="Students" value={roster.length} icon={Users} />
-        <StatCard label="Attendance rate" value={pct(batchAttendancePct(store.attendance, batch.id))} icon={CalendarCheck} tone="success" />
+        <StatCard label="Attendance rate" value={pct(batch.attendancePercent)} icon={CalendarCheck} tone="success" />
         <StatCard label="Homework assigned" value={homework.length} hint={`${homework.filter((h) => h.status === "pending").length} pending`} icon={ClipboardList} tone="info" />
-        <StatCard label="Monthly revenue" value={inr(roster.reduce((s, r) => s + r.monthlyFee, 0), { compact: true })} icon={Layers} tone="accent" />
+        <StatCard label="Monthly revenue" value={inr(batch.monthlyRevenue, { compact: true })} icon={Layers} tone="accent" />
       </div>
 
       <SectionCard title="Student list" description={`${roster.length} students in this batch`} bodyClassName="p-0">
@@ -142,11 +166,11 @@ function BatchDetailPage() {
         <SectionCard title="Upcoming classes" bodyClassName="p-0">
           {upcoming.length ? (
             <ul className="divide-y divide-border">
-              {upcoming.map(({ date }) => (
+              {upcoming.map(({ date, startTime, endTime }) => (
                 <li key={date} className="flex items-center justify-between px-4 py-3 text-sm">
                   <span className="font-medium">{formatDateShort(date)}</span>
                   <span className="text-muted-foreground">
-                    {formatTime(batch.startTime)} – {formatTime(batch.endTime)}
+                    {formatTime(startTime ?? batch.startTime)} – {formatTime(endTime ?? batch.endTime)}
                   </span>
                 </li>
               ))}

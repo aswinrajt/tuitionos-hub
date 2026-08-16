@@ -19,8 +19,16 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { useStore } from "@/store/tuition-store";
-import { formatDate, formatTime, initials, inr } from "@/lib/format";
+import { Skeleton } from "@/components/ui/skeleton";
+import {
+  useCreateTeacher,
+  useDeleteTeacher,
+  useSettings,
+  useTeachers,
+  useUpdateTeacher,
+  type TeacherRow,
+} from "@/hooks/api";
+import { TODAY, formatDate, formatTime, initials, inr } from "@/lib/format";
 import type { Teacher } from "@/data/types";
 import { toast } from "sonner";
 
@@ -45,33 +53,44 @@ const emptyDraft = (subject: string) => ({
   email: "",
   subjects: [subject],
   qualification: "",
-  joiningDate: new Date().toISOString().slice(0, 10),
+  joiningDate: TODAY,
   status: "active" as Teacher["status"],
   monthlySalary: 25000,
 });
 
 function TeachersPage() {
-  const store = useStore();
   const [query, setQuery] = useState("");
+  const { data: settings } = useSettings();
+  const { data, isLoading } = useTeachers(query);
+  const createTeacher = useCreateTeacher();
+  const updateTeacher = useUpdateTeacher();
+  const deleteTeacher = useDeleteTeacher();
+  const rows = data?.rows ?? [];
+  const meta = data?.meta;
+  const subjects = settings?.subjects ?? [];
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<Teacher | null>(null);
   const [toDelete, setToDelete] = useState<Teacher | null>(null);
-  const [draft, setDraft] = useState(emptyDraft(store.settings.subjects[0] ?? "Mathematics"));
-
-  const rows = store.teachers.filter((t) =>
-    `${t.name} ${t.subjects.join(" ")} ${t.phone}`.toLowerCase().includes(query.toLowerCase()),
-  );
-  const payroll = store.teachers.reduce((s, t) => s + t.monthlySalary, 0);
+  const [draft, setDraft] = useState(emptyDraft(subjects[0] ?? "Mathematics"));
 
   const openCreate = () => {
     setEditing(null);
-    setDraft(emptyDraft(store.settings.subjects[0] ?? "Mathematics"));
+    setDraft(emptyDraft(subjects[0] ?? "Mathematics"));
     setOpen(true);
   };
 
   const openEdit = (t: Teacher) => {
     setEditing(t);
-    setDraft({ ...t });
+    setDraft({
+      name: t.name,
+      phone: t.phone,
+      email: t.email,
+      subjects: t.subjects,
+      qualification: t.qualification,
+      joiningDate: t.joiningDate,
+      status: t.status,
+      monthlySalary: t.monthlySalary,
+    });
     setOpen(true);
   };
 
@@ -96,10 +115,10 @@ function TeachersPage() {
       />
 
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        <StatCard label="Total teachers" value={store.teachers.length} icon={GraduationCap} />
-        <StatCard label="Active" value={store.teachers.filter((t) => t.status === "active").length} icon={Users} tone="success" />
-        <StatCard label="On leave" value={store.teachers.filter((t) => t.status === "on-leave").length} icon={Users} tone="warning" />
-        <StatCard label="Monthly payroll" value={inr(payroll)} icon={IndianRupee} tone="info" />
+        <StatCard label="Total teachers" value={meta?.total ?? rows.length} icon={GraduationCap} />
+        <StatCard label="Active" value={meta?.activeCount ?? 0} icon={Users} tone="success" />
+        <StatCard label="On leave" value={meta?.onLeaveCount ?? 0} icon={Users} tone="warning" />
+        <StatCard label="Monthly payroll" value={inr(meta?.monthlyPayroll ?? 0)} icon={IndianRupee} tone="info" />
       </div>
 
       <SectionCard bodyClassName="p-4">
@@ -110,13 +129,17 @@ function TeachersPage() {
         />
       </SectionCard>
 
-      {rows.length ? (
+      {isLoading ? (
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-          {rows.map((t) => {
-            const batches = store.batches.filter((b) => b.teacherId === t.id);
-            const studentCount = store.students.filter((s) =>
-              batches.some((b) => b.id === s.batchId),
-            ).length;
+          {Array.from({ length: 6 }).map((_, i) => (
+            <Skeleton key={i} className="h-72 rounded-2xl" />
+          ))}
+        </div>
+      ) : rows.length ? (
+        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+          {rows.map((t: TeacherRow) => {
+            const batches = t.batches ?? [];
+            const studentCount = t.studentCount ?? 0;
             return (
               <div key={t.id} className="surface-card flex flex-col gap-4 p-5">
                 <div className="flex items-start gap-3">
@@ -140,10 +163,13 @@ function TeachersPage() {
                       </DropdownMenuItem>
                       <DropdownMenuItem
                         onClick={() => {
-                          store.updateTeacher(t.id, {
-                            status: t.status === "active" ? "on-leave" : "active",
-                          });
-                          toast.success(t.status === "active" ? "Marked on leave" : "Marked active");
+                          updateTeacher.mutate(
+                            { id: t.id, status: t.status === "active" ? "on-leave" : "active" },
+                            {
+                              onSuccess: () =>
+                                toast.success(t.status === "active" ? "Marked on leave" : "Marked active"),
+                            },
+                          );
                         }}
                       >
                         {t.status === "active" ? "Mark on leave" : "Mark active"}
@@ -209,19 +235,31 @@ function TeachersPage() {
         title={editing ? "Edit teacher" : "Add teacher"}
         description="Faculty details, subjects and salary."
         submitLabel={editing ? "Save changes" : "Add teacher"}
+        pending={createTeacher.isPending || updateTeacher.isPending}
+        pendingLabel={editing ? "Saving…" : "Adding teacher…"}
         onSubmit={() => {
           if (!draft.name.trim() || !draft.phone.trim()) {
             toast.error("Name and phone are required");
             return;
           }
           if (editing) {
-            store.updateTeacher(editing.id, draft);
-            toast.success("Teacher updated");
+            updateTeacher.mutate(
+              { id: editing.id, ...draft },
+              {
+                onSuccess: () => {
+                  toast.success("Teacher updated");
+                  setOpen(false);
+                },
+              },
+            );
           } else {
-            store.addTeacher(draft);
-            toast.success("Teacher added");
+            createTeacher.mutate(draft, {
+              onSuccess: () => {
+                toast.success("Teacher added");
+                setOpen(false);
+              },
+            });
           }
-          setOpen(false);
         }}
       >
         <div className="grid gap-4 sm:grid-cols-2">
@@ -254,7 +292,7 @@ function TeachersPage() {
           </Field>
           <Field label="Subjects taught" className="sm:col-span-2" hint="Tap to select one or more subjects.">
             <div className="flex flex-wrap gap-2">
-              {store.settings.subjects.map((s) => (
+              {subjects.map((s) => (
                 <Button
                   key={s}
                   type="button"
@@ -276,13 +314,17 @@ function TeachersPage() {
         title="Remove this teacher?"
         description={`${toDelete?.name} will be removed from the faculty list.`}
         confirmLabel="Remove"
+        pendingLabel="Removing…"
         destructive
+        pending={deleteTeacher.isPending}
         onConfirm={() => {
-          if (toDelete) {
-            store.deleteTeacher(toDelete.id);
-            toast.success("Teacher removed");
-          }
-          setToDelete(null);
+          if (!toDelete) return;
+          deleteTeacher.mutate(toDelete.id, {
+            onSuccess: () => {
+              toast.success("Teacher removed");
+              setToDelete(null);
+            },
+          });
         }}
       />
     </AppShell>

@@ -2,12 +2,20 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useState } from "react";
 import { CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { Award, Printer, TrendingUp } from "lucide-react";
-import { ParentCard, ParentEmpty, ParentPageTitle, ParentShell, useParentContext } from "@/components/parent/ParentShell";
+import {
+  ParentCard,
+  ParentEmpty,
+  ParentPageTitle,
+  ParentScreenLoading,
+  ParentShell,
+  useParentContext,
+} from "@/components/parent/ParentShell";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { childExams } from "@/lib/parent";
+import { useParentAuth } from "@/store/parent-auth";
+import { useParentExams, useParentResultCard } from "@/hooks/api";
 import { formatDate, pct } from "@/lib/format";
 
 export const Route = createFileRoute("/parent/exams")({
@@ -23,10 +31,14 @@ export const Route = createFileRoute("/parent/exams")({
 });
 
 function ParentExamsPage() {
-  const { child, store } = useParentContext();
+  const { activeChildId } = useParentAuth();
+  const { child } = useParentContext();
+  const studentId = child?.id ?? activeChildId;
+  const { data, isLoading } = useParentExams(studentId);
+  const resultCard = useParentResultCard(studentId);
   const [cardOpen, setCardOpen] = useState(false);
 
-  if (!child) {
+  if (!studentId) {
     return (
       <ParentShell>
         <ParentEmpty title="No child linked" />
@@ -34,18 +46,27 @@ function ParentExamsPage() {
     );
   }
 
-  const results = childExams(store.exams, child);
-  const avg = results.length ? results.reduce((a, b) => a + b.percent, 0) / results.length : 0;
-  const best = results.reduce<(typeof results)[number] | null>((b, r) => (!b || r.percent > b.percent ? r : b), null);
+  if (isLoading || !data) {
+    return (
+      <ParentShell>
+        <ParentScreenLoading />
+      </ParentShell>
+    );
+  }
+
+  const results = data.results;
+  const avg = data.averagePercent;
+  const firstName = data.childName.split(" ")[0];
   const trend = [...results].reverse().map((r) => ({
     label: r.exam.name.length > 10 ? `${r.exam.name.slice(0, 10)}…` : r.exam.name,
     score: Math.round(r.percent),
     average: Math.round(r.classAveragePct),
   }));
+  const printed = resultCard.data ?? { ...data, centreName: "Tuition centre", academicYear: "" };
 
   return (
     <ParentShell>
-      <ParentPageTitle title="Exams & results" description={`Published results for ${child.name}.`} />
+      <ParentPageTitle title="Exams & results" description={`Published results for ${data.childName}.`} />
 
       {results.length === 0 ? (
         <ParentEmpty title="No results published yet" body="Results will appear here once teachers enter the marks." />
@@ -59,7 +80,11 @@ function ParentExamsPage() {
               </div>
               <div className="text-right text-sm text-muted-foreground">
                 <p>{results.length} results</p>
-                {best ? <p className="flex items-center justify-end gap-1"><Award className="size-3.5" /> Best {pct(best.percent)}</p> : null}
+                {data.bestPercent ? (
+                  <p className="flex items-center justify-end gap-1">
+                    <Award className="size-3.5" /> Best {pct(data.bestPercent)}
+                  </p>
+                ) : null}
               </div>
             </div>
             <Progress value={avg} className="mt-3" />
@@ -75,7 +100,7 @@ function ParentExamsPage() {
                   <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="var(--color-border)" />
                   <XAxis dataKey="label" tickLine={false} axisLine={false} fontSize={11} />
                   <YAxis domain={[0, 100]} tickLine={false} axisLine={false} fontSize={11} />
-                  <Tooltip formatter={(v: number, name) => [`${v}%`, name === "score" ? child.name.split(" ")[0] : "Class average"]} />
+                  <Tooltip formatter={(v: number, name) => [`${v}%`, name === "score" ? firstName : "Class average"]} />
                   <Line type="monotone" dataKey="score" stroke="var(--color-chart-1)" strokeWidth={2.5} dot />
                   <Line type="monotone" dataKey="average" stroke="var(--color-muted-foreground)" strokeDasharray="4 4" strokeWidth={2} dot={false} />
                 </LineChart>
@@ -96,8 +121,8 @@ function ParentExamsPage() {
                       {r.exam.subject} · {formatDate(r.exam.date)}
                     </p>
                   </div>
-                  <Badge variant={r.percent >= r.classAveragePct ? "default" : "secondary"}>
-                    {r.percent >= r.classAveragePct ? "Above average" : "Below average"}
+                  <Badge variant={r.aboveAverage ? "default" : "secondary"}>
+                    {r.aboveAverage ? "Above average" : "Below average"}
                   </Badge>
                 </div>
                 <div className="mt-3 flex items-end justify-between">
@@ -126,15 +151,17 @@ function ParentExamsPage() {
           </DialogHeader>
           <div className="space-y-3 text-sm">
             <div className="rounded-xl bg-muted/50 p-3">
-              <p className="font-display text-base font-semibold">{store.settings.centreName}</p>
-              <p className="text-xs text-muted-foreground">Academic year {store.settings.academicYear}</p>
+              <p className="font-display text-base font-semibold">{printed.centreName ?? "Tuition centre"}</p>
+              {printed.academicYear ? (
+                <p className="text-xs text-muted-foreground">Academic year {printed.academicYear}</p>
+              ) : null}
             </div>
             <div>
-              <p className="font-medium">{child.name}</p>
-              <p className="text-xs text-muted-foreground">{child.className}</p>
+              <p className="font-medium">{printed.childName}</p>
+              <p className="text-xs text-muted-foreground">{printed.className}</p>
             </div>
             <ul className="divide-y divide-border">
-              {results.map((r) => (
+              {printed.results.map((r) => (
                 <li key={r.exam.id} className="flex items-center justify-between py-2">
                   <span className="min-w-0 truncate">{r.exam.subject} — {r.exam.name}</span>
                   <span className="shrink-0 font-medium">{r.marks}/{r.exam.maxMarks}</span>
@@ -143,7 +170,7 @@ function ParentExamsPage() {
             </ul>
             <div className="flex items-center justify-between border-t border-border pt-3 font-medium">
               <span>Overall</span>
-              <span>{pct(avg)}</span>
+              <span>{pct(printed.averagePercent)}</span>
             </div>
             <Button className="h-11 w-full" onClick={() => window.print()}>
               <Printer className="mr-2 size-4" /> Print result card

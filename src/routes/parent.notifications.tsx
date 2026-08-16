@@ -1,9 +1,17 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useState } from "react";
 import { BookOpen, CalendarDays, ClipboardList, Megaphone, Wallet } from "lucide-react";
-import { ParentCard, ParentEmpty, ParentPageTitle, ParentShell, useParentContext } from "@/components/parent/ParentShell";
+import {
+  ParentCard,
+  ParentEmpty,
+  ParentPageTitle,
+  ParentScreenLoading,
+  ParentShell,
+  useParentContext,
+} from "@/components/parent/ParentShell";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { parentNotifications, type ParentNotification } from "@/lib/parent";
+import { useParentAuth } from "@/store/parent-auth";
+import { useParentNotifications, type ParentNotificationItem } from "@/hooks/api";
 import { formatDate } from "@/lib/format";
 
 export const Route = createFileRoute("/parent/notifications")({
@@ -18,7 +26,7 @@ export const Route = createFileRoute("/parent/notifications")({
   component: ParentNotificationsPage,
 });
 
-const meta: Record<ParentNotification["kind"], { icon: React.ComponentType<{ className?: string }>; tone: string; label: string }> = {
+const meta: Record<string, { icon: React.ComponentType<{ className?: string }>; tone: string; label: string }> = {
   fee: { icon: Wallet, tone: "bg-accent-soft text-accent-foreground", label: "Fees" },
   attendance: { icon: CalendarDays, tone: "bg-destructive/15 text-destructive", label: "Attendance" },
   homework: { icon: ClipboardList, tone: "bg-primary-soft text-primary", label: "Homework" },
@@ -27,10 +35,13 @@ const meta: Record<ParentNotification["kind"], { icon: React.ComponentType<{ cla
 };
 
 function ParentNotificationsPage() {
-  const { child, store } = useParentContext();
-  const [filter, setFilter] = useState<"all" | ParentNotification["kind"]>("all");
+  const { activeChildId } = useParentAuth();
+  const { child } = useParentContext();
+  const studentId = child?.id ?? activeChildId;
+  const [filter, setFilter] = useState<"all" | ParentNotificationItem["kind"]>("all");
+  const { data: items = [], isLoading } = useParentNotifications(studentId, filter === "all" ? undefined : filter);
 
-  if (!child) {
+  if (!studentId) {
     return (
       <ParentShell>
         <ParentEmpty title="No child linked" />
@@ -38,16 +49,13 @@ function ParentNotificationsPage() {
     );
   }
 
-  const items = parentNotifications({
-    student: child,
-    attendance: store.attendance,
-    payments: store.feePayments,
-    homework: store.homework,
-    exams: store.exams,
-    announcements: store.announcements,
-    dueDay: store.settings.feeDueDay,
-  });
-  const list = filter === "all" ? items : items.filter((n) => n.kind === filter);
+  if (isLoading) {
+    return (
+      <ParentShell>
+        <ParentScreenLoading />
+      </ParentShell>
+    );
+  }
 
   return (
     <ParentShell>
@@ -65,11 +73,11 @@ function ParentNotificationsPage() {
         </TabsList>
       </Tabs>
 
-      {list.length ? (
+      {items.length ? (
         <ParentCard>
           <ul className="divide-y divide-border">
-            {list.map((n) => {
-              const m = meta[n.kind];
+            {items.map((n) => {
+              const m = meta[n.kind] ?? meta["announcement"]!;
               return (
                 <li key={n.id} className="flex gap-3 py-3 first:pt-0 last:pb-0">
                   <span className={`grid size-9 shrink-0 place-items-center rounded-xl ${m.tone}`}>

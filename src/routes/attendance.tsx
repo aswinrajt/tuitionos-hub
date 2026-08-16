@@ -11,11 +11,10 @@ import { StatusBadge } from "@/components/common/StatusBadge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Progress } from "@/components/ui/progress";
+import { Skeleton } from "@/components/ui/skeleton";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { useStore } from "@/store/tuition-store";
-import { TODAY } from "@/data/mock";
-import { attendancePct, batchAttendancePct, todayAttendanceSummary } from "@/lib/selectors";
-import { formatDate, initials, pct } from "@/lib/format";
+import { useAttendance, useAttendanceSummary, useBatches, useSaveAttendance } from "@/hooks/api";
+import { TODAY, formatDate, initials, pct } from "@/lib/format";
 import type { AttendanceMark } from "@/data/types";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
@@ -35,30 +34,46 @@ export const Route = createFileRoute("/attendance")({
   component: AttendancePage,
 });
 
+type TodaySummary = {
+  present?: number;
+  total?: number;
+  batches?: number;
+  batchesMarked?: number;
+  batchesTotal?: number;
+  absent?: number;
+};
+
 function AttendancePage() {
-  const store = useStore();
-  const [batchId, setBatchId] = useState(store.batches[0]?.id ?? "");
+  const { data: batches = [] } = useBatches();
+  const { data: todayRaw } = useAttendanceSummary();
+  const saveAttendance = useSaveAttendance();
+  const [batchId, setBatchId] = useState("");
   const [date, setDate] = useState(TODAY);
   const [draft, setDraft] = useState<Record<string, AttendanceMark> | null>(null);
 
-  const roster = store.students.filter((s) => s.batchId === batchId && s.status === "active");
-  const saved = store.attendance.find((a) => a.batchId === batchId && a.date === date);
+  const effectiveBatchId = batchId || batches[0]?.id || "";
+  const { data: attendance, isLoading: rosterLoading } = useAttendance(effectiveBatchId, date);
+
+  const roster = attendance?.roster ?? [];
+  const history = attendance?.history ?? [];
+  const saved = attendance?.session?.saved ?? false;
 
   const marks = useMemo(() => {
     if (draft) return draft;
     const base: Record<string, AttendanceMark> = {};
     roster.forEach((s) => {
-      base[s.id] = saved?.entries.find((e) => e.studentId === s.id)?.mark ?? "present";
+      base[s.studentId] = s.mark;
     });
     return base;
-  }, [draft, roster, saved]);
+  }, [draft, roster]);
 
-  const presentCount = roster.filter((s) => marks[s.id] === "present").length;
-  const today = todayAttendanceSummary(store.attendance);
-  const history = store.attendance
-    .filter((a) => a.batchId === batchId)
-    .sort((a, b) => b.date.localeCompare(a.date))
-    .slice(0, 12);
+  const presentCount = roster.filter((s) => marks[s.studentId] === "present").length;
+  const today = (todayRaw ?? {}) as TodaySummary;
+  const todayPresent = today.present ?? 0;
+  const todayTotal = today.total ?? 0;
+  const todayBatches = today.batchesMarked ?? today.batches ?? 0;
+  const todayAbsent = today.absent ?? todayTotal - todayPresent;
+  const batchesTotal = today.batchesTotal ?? batches.length;
 
   const setMark = (studentId: string, mark: AttendanceMark) =>
     setDraft({ ...marks, [studentId]: mark });
@@ -78,7 +93,7 @@ function AttendancePage() {
             variant="outline"
             onClick={() => {
               const all: Record<string, AttendanceMark> = {};
-              roster.forEach((s) => (all[s.id] = "present"));
+              roster.forEach((s) => (all[s.studentId] = "present"));
               setDraft(all);
               toast.success("All students marked present");
             }}
@@ -90,10 +105,10 @@ function AttendancePage() {
       />
 
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        <StatCard label="Today's attendance" value={today.total ? pct((today.present / today.total) * 100) : "—"} hint={`${today.present}/${today.total} present`} icon={CalendarCheck} tone="success" />
-        <StatCard label="Batches marked today" value={today.batches} hint={`of ${store.batches.length} batches`} icon={Check} tone="info" />
-        <StatCard label="Selected batch rate" value={pct(batchAttendancePct(store.attendance, batchId))} hint="All-time average" icon={CalendarCheck} />
-        <StatCard label="Absent today" value={today.total - today.present} hint="Across all marked batches" icon={UserX} tone="destructive" />
+        <StatCard label="Today's attendance" value={todayTotal ? pct((todayPresent / todayTotal) * 100) : "—"} hint={`${todayPresent}/${todayTotal} present`} icon={CalendarCheck} tone="success" />
+        <StatCard label="Batches marked today" value={todayBatches} hint={`of ${batchesTotal} batches`} icon={Check} tone="info" />
+        <StatCard label="Selected batch rate" value={pct(attendance?.batchAttendancePercent ?? 0)} hint="All-time average" icon={CalendarCheck} />
+        <StatCard label="Absent today" value={todayAbsent} hint="Across all marked batches" icon={UserX} tone="destructive" />
       </div>
 
       <SectionCard bodyClassName="p-4">
@@ -101,7 +116,7 @@ function AttendancePage() {
           <div>
             <p className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Batch</p>
             <Select
-              value={batchId}
+              value={effectiveBatchId || undefined}
               onValueChange={(v) => {
                 setBatchId(v);
                 setDraft(null);
@@ -109,7 +124,7 @@ function AttendancePage() {
             >
               <SelectTrigger><SelectValue placeholder="Select batch" /></SelectTrigger>
               <SelectContent>
-                {store.batches.map((b) => (
+                {batches.map((b) => (
                   <SelectItem key={b.id} value={b.id}>
                     {b.name} · {b.subject}
                   </SelectItem>
@@ -143,39 +158,53 @@ function AttendancePage() {
           action={
             <Button
               size="sm"
+              loading={saveAttendance.isPending}
               onClick={() => {
-                store.saveAttendance(
-                  batchId,
-                  date,
-                  roster.map((s) => ({ studentId: s.id, mark: marks[s.id] ?? "present" })),
+                if (!effectiveBatchId) return;
+                saveAttendance.mutate(
+                  {
+                    batchId: effectiveBatchId,
+                    date,
+                    entries: roster.map((s) => ({ studentId: s.studentId, mark: marks[s.studentId] ?? "present" })),
+                  },
+                  {
+                    onSuccess: () => {
+                      setDraft(null);
+                      toast.success("Attendance saved");
+                    },
+                  },
                 );
-                setDraft(null);
-                toast.success("Attendance saved");
               }}
               disabled={!roster.length}
             >
-              <Save className="mr-2 size-4" /> Save
+              <Save className="mr-2 size-4" /> {saveAttendance.isPending ? "Saving…" : "Save"}
             </Button>
           }
         >
-          {roster.length ? (
-            <ul className="divide-y divide-border">
+          {rosterLoading ? (
+            <div className="space-y-3 p-4">
+              {Array.from({ length: 6 }).map((_, i) => (
+                <Skeleton key={i} className="h-12 w-full" />
+              ))}
+            </div>
+          ) : roster.length ? (
+            <ul className={cn("divide-y divide-border", saveAttendance.isPending && "pointer-events-none opacity-70")}>
               {roster.map((s) => {
-                const mark = marks[s.id] ?? "present";
+                const mark = marks[s.studentId] ?? "present";
                 return (
-                  <li key={s.id} className="flex items-center gap-3 px-4 py-3">
+                  <li key={s.studentId} className="flex items-center gap-3 px-4 py-3">
                     <span className="grid size-9 shrink-0 place-items-center rounded-full bg-secondary text-xs font-bold text-secondary-foreground">
                       {initials(s.name)}
                     </span>
                     <div className="min-w-0 flex-1">
                       <p className="truncate font-medium">{s.name}</p>
                       <p className="text-xs text-muted-foreground">
-                        Overall {pct(attendancePct(store.attendance, s.id))}
+                        Overall {pct(s.overallPercent)}
                       </p>
                     </div>
                     <div className="flex overflow-hidden rounded-lg border border-border">
                       <button
-                        onClick={() => setMark(s.id, "present")}
+                        onClick={() => setMark(s.studentId, "present")}
                         className={cn(
                           "flex items-center gap-1 px-3 py-1.5 text-xs font-semibold transition-colors",
                           mark === "present" ? "bg-success text-success-foreground" : "hover:bg-muted",
@@ -184,7 +213,7 @@ function AttendancePage() {
                         <Check className="size-3.5" /> Present
                       </button>
                       <button
-                        onClick={() => setMark(s.id, "absent")}
+                        onClick={() => setMark(s.studentId, "absent")}
                         className={cn(
                           "flex items-center gap-1 px-3 py-1.5 text-xs font-semibold transition-colors",
                           mark === "absent" ? "bg-destructive text-destructive-foreground" : "hover:bg-muted",
@@ -240,25 +269,22 @@ function AttendancePage() {
           <SectionCard title="Attendance history" description="Last 12 sessions" bodyClassName="p-0">
             {history.length ? (
               <ul className="divide-y divide-border">
-                {history.map((a) => {
-                  const present = a.entries.filter((e) => e.mark === "present").length;
-                  return (
-                    <li key={a.id} className="flex items-center justify-between px-4 py-2.5 text-sm">
-                      <button
-                        className="font-medium hover:text-primary"
-                        onClick={() => {
-                          setDate(a.date);
-                          setDraft(null);
-                        }}
-                      >
-                        {formatDate(a.date)}
-                      </button>
-                      <span className="text-muted-foreground">
-                        {present}/{a.entries.length} · {pct((present / a.entries.length) * 100)}
-                      </span>
-                    </li>
-                  );
-                })}
+                {history.map((a) => (
+                  <li key={a.id ?? a.date} className="flex items-center justify-between px-4 py-2.5 text-sm">
+                    <button
+                      className="font-medium hover:text-primary"
+                      onClick={() => {
+                        setDate(a.date);
+                        setDraft(null);
+                      }}
+                    >
+                      {formatDate(a.date)}
+                    </button>
+                    <span className="text-muted-foreground">
+                      {a.present}/{a.total} · {pct(a.percent)}
+                    </span>
+                  </li>
+                ))}
               </ul>
             ) : (
               <EmptyState icon={CalendarCheck} title="No history yet" description="Saved attendance will appear here." />

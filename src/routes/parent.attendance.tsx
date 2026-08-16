@@ -2,12 +2,13 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useState } from "react";
 import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { ChevronLeft, ChevronRight } from "lucide-react";
-import { ParentCard, ParentEmpty, ParentPageTitle, ParentShell, useParentContext } from "@/components/parent/ParentShell";
+import { ParentCard, ParentEmpty, ParentPageTitle, ParentScreenLoading, ParentShell, useParentContext } from "@/components/parent/ParentShell";
 import { Progress } from "@/components/ui/progress";
 import { Button } from "@/components/ui/button";
-import { attendanceCalendar, childAttendanceSummary, monthlyAttendanceTrend } from "@/lib/parent";
-import { CURRENT_MONTH } from "@/data/mock";
-import { formatDate, formatMonth, pct } from "@/lib/format";
+import { attendanceCalendar } from "@/lib/parent";
+import { useParentAuth } from "@/store/parent-auth";
+import { useParentAttendance } from "@/hooks/api";
+import { CURRENT_MONTH, formatDate, formatMonth, pct } from "@/lib/format";
 
 export const Route = createFileRoute("/parent/attendance")({
   head: () => ({
@@ -28,10 +29,13 @@ const shiftMonth = (month: string, delta: number) => {
 };
 
 function ParentAttendancePage() {
-  const { child, store } = useParentContext();
+  const { activeChildId } = useParentAuth();
+  const { child } = useParentContext();
+  const studentId = child?.id ?? activeChildId;
   const [month, setMonth] = useState(CURRENT_MONTH);
+  const { data, isLoading } = useParentAttendance(studentId, month);
 
-  if (!child) {
+  if (!studentId) {
     return (
       <ParentShell>
         <ParentEmpty title="No child linked" />
@@ -39,31 +43,36 @@ function ParentAttendancePage() {
     );
   }
 
-  const summary = childAttendanceSummary(store.attendance, child);
-  const cells = attendanceCalendar(summary.rows, month);
-  const trend = monthlyAttendanceTrend(summary.rows);
-  const inMonth = summary.rows.filter((r) => r.date.startsWith(month));
-  const monthPresent = inMonth.filter((r) => r.mark === "present").length;
+  if (isLoading || !data) {
+    return (
+      <ParentShell>
+        <ParentScreenLoading />
+      </ParentShell>
+    );
+  }
+
+  const cells = attendanceCalendar(data.month.days, month);
+  const firstName = (child?.name ?? "your child").split(" ")[0];
 
   return (
     <ParentShell>
-      <ParentPageTitle title="Attendance" description={`How often ${child.name.split(" ")[0]} attended class.`} />
+      <ParentPageTitle title="Attendance" description={`How often ${firstName} attended class.`} />
 
       <ParentCard>
         <div className="flex items-end justify-between">
           <div>
             <p className="text-xs uppercase tracking-wide text-muted-foreground">Overall attendance</p>
-            <p className="font-display text-3xl font-semibold">{pct(summary.percent)}</p>
+            <p className="font-display text-3xl font-semibold">{pct(data.overall.percent)}</p>
           </div>
           <p className="text-sm text-muted-foreground">
-            {summary.present} present · {summary.absent} absent
+            {data.overall.present} present · {data.overall.absent} absent
           </p>
         </div>
-        <Progress value={summary.percent} className="mt-3" />
+        <Progress value={data.overall.percent} className="mt-3" />
         <p className="mt-2 text-xs text-muted-foreground">
-          {summary.percent >= 90
+          {data.overall.percent >= 90
             ? "Excellent attendance. Keep it up!"
-            : summary.percent >= 75
+            : data.overall.percent >= 75
               ? "Good attendance. Try not to miss classes."
               : "Attendance is low. Please speak to the class teacher."}
         </p>
@@ -119,14 +128,14 @@ function ParentAttendancePage() {
           <span className="flex items-center gap-1.5"><span className="size-3 rounded bg-muted" /> No class</span>
         </div>
         <p className="mt-2 text-sm">
-          <span className="font-semibold">{monthPresent}</span> of {inMonth.length} classes attended in {formatMonth(month)}.
+          <span className="font-semibold">{data.month.present}</span> of {data.month.total} classes attended in {formatMonth(month)}.
         </p>
       </ParentCard>
 
       <ParentCard title="Monthly trend">
         <div className="h-40">
           <ResponsiveContainer width="100%" height="100%">
-            <BarChart data={trend} margin={{ top: 5, right: 5, bottom: 0, left: -20 }}>
+            <BarChart data={data.trend} margin={{ top: 5, right: 5, bottom: 0, left: -20 }}>
               <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="var(--color-border)" />
               <XAxis dataKey="label" tickLine={false} axisLine={false} fontSize={12} />
               <YAxis domain={[0, 100]} tickLine={false} axisLine={false} fontSize={12} />
@@ -138,9 +147,9 @@ function ParentAttendancePage() {
       </ParentCard>
 
       <ParentCard title="Recent absences">
-        {summary.recentAbsences.length ? (
+        {data.recentAbsences.length ? (
           <ul className="space-y-2">
-            {summary.recentAbsences.map((r) => (
+            {data.recentAbsences.map((r) => (
               <li key={r.date} className="flex items-center justify-between rounded-xl bg-destructive/10 px-3 py-2.5 text-sm">
                 <span className="font-medium">{formatDate(r.date)}</span>
                 <span className="text-destructive">Absent</span>

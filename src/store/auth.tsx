@@ -1,6 +1,8 @@
 import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
+import { api, getStaffToken, setStaffToken } from "@/lib/api";
 
 export interface AuthUser {
+  id?: string;
   name: string;
   email: string;
   centreName: string;
@@ -9,18 +11,11 @@ export interface AuthUser {
 
 const STORAGE_KEY = "tuitionos.session";
 
-export const DEMO_USER: AuthUser = {
-  name: "Anil Kumar",
-  email: "anil@vidyaclasses.in",
-  centreName: "Vidya Classes",
-  role: "owner",
-};
-
 interface AuthContextValue {
   user: AuthUser | null;
   ready: boolean;
-  login: (user: AuthUser) => void;
-  logout: () => void;
+  login: (user: AuthUser, accessToken: string) => void;
+  logout: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
@@ -30,29 +25,53 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [ready, setReady] = useState(false);
 
   useEffect(() => {
-    try {
-      const raw = window.localStorage.getItem(STORAGE_KEY);
-      if (raw) setUser(JSON.parse(raw) as AuthUser);
-    } catch {
-      /* ignore */
-    }
-    setReady(true);
+    let cancelled = false;
+    const hydrate = async () => {
+      if (!getStaffToken()) {
+        if (!cancelled) setReady(true);
+        return;
+      }
+      try {
+        const { data } = await api<{ user: AuthUser }>("/v1/auth/me");
+        if (!cancelled) {
+          setUser(data.user);
+          window.localStorage.setItem(STORAGE_KEY, JSON.stringify(data.user));
+        }
+      } catch {
+        setStaffToken(null);
+        window.localStorage.removeItem(STORAGE_KEY);
+        if (!cancelled) setUser(null);
+      } finally {
+        if (!cancelled) setReady(true);
+      }
+    };
+    void hydrate();
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   const value = useMemo<AuthContextValue>(
     () => ({
       user,
       ready,
-      login: (next) => {
+      login: (next, accessToken) => {
         setUser(next);
+        setStaffToken(accessToken);
         try {
           window.localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
         } catch {
           /* ignore */
         }
       },
-      logout: () => {
+      logout: async () => {
+        try {
+          await api("/v1/auth/logout", { method: "POST" });
+        } catch {
+          /* still clear locally */
+        }
         setUser(null);
+        setStaffToken(null);
         try {
           window.localStorage.removeItem(STORAGE_KEY);
         } catch {

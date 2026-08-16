@@ -16,11 +16,10 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { Skeleton } from "@/components/ui/skeleton";
 import { BatchFormModal } from "@/components/modals/BatchFormModal";
-import { useStore } from "@/store/tuition-store";
-import { TODAY } from "@/data/mock";
-import { batchAttendancePct, classesOnDate, upcomingClasses } from "@/lib/selectors";
-import { formatDateShort, formatTime, pct } from "@/lib/format";
+import { useBatches, useDeleteBatch, useSchedule, type BatchRow } from "@/hooks/api";
+import { TODAY, formatDateShort, formatTime, pct, shift } from "@/lib/format";
 import type { Batch } from "@/data/types";
 import { toast } from "sonner";
 
@@ -39,25 +38,30 @@ export const Route = createFileRoute("/batches/")({
   component: BatchesPage,
 });
 
+type ScheduleItem = { date: string; batch: BatchRow };
+
 function BatchesPage() {
-  const store = useStore();
   const navigate = useNavigate();
+  const { data: allBatches = [], isLoading } = useBatches();
+  const { data: scheduleData } = useSchedule(TODAY, shift(3));
+  const deleteBatch = useDeleteBatch();
   const [query, setQuery] = useState("");
   const [formOpen, setFormOpen] = useState(false);
   const [editing, setEditing] = useState<Batch | undefined>();
   const [toDelete, setToDelete] = useState<Batch | null>(null);
 
-  const batches = store.batches.filter((b) =>
+  const batches = allBatches.filter((b) =>
     `${b.name} ${b.subject} ${b.className}`.toLowerCase().includes(query.trim().toLowerCase()),
   );
-  const todayClasses = classesOnDate(store.batches, TODAY);
-  const upcoming = upcomingClasses(store.batches, 3).slice(0, 8);
+  const schedule = (scheduleData as ScheduleItem[] | undefined) ?? [];
+  const todayClasses = schedule.filter((item) => item.date === TODAY).map((item) => item.batch);
+  const upcoming = schedule.filter((item) => item.date > TODAY).slice(0, 8);
 
   return (
     <AppShell>
       <PageHeader
         title="Batches"
-        description={`${store.batches.length} batches · ${todayClasses.length} classes scheduled today`}
+        description={`${allBatches.length} batches · ${todayClasses.length} classes scheduled today`}
         actions={
           <Button
             onClick={() => {
@@ -77,94 +81,96 @@ function BatchesPage() {
         className="max-w-md"
       />
 
-      {batches.length ? (
+      {isLoading ? (
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-          {batches.map((b) => {
-            const teacher = store.teachers.find((t) => t.id === b.teacherId);
-            const count = store.students.filter((s) => s.batchId === b.id).length;
-            return (
-              <div key={b.id} className="surface-card flex flex-col gap-4 p-5">
-                <div className="flex items-start justify-between gap-2">
-                  <div className="min-w-0">
-                    <Link
-                      to="/batches/$batchId"
-                      params={{ batchId: b.id }}
-                      className="font-display text-base font-semibold hover:text-primary"
-                    >
-                      {b.name}
-                    </Link>
-                    <p className="text-xs text-muted-foreground">
-                      {b.className} · {b.subject}
-                    </p>
-                  </div>
-                  <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                      <Button variant="ghost" size="icon" aria-label="Batch actions">
-                        <MoreVertical className="size-4" />
-                      </Button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end">
-                      <DropdownMenuItem onClick={() => navigate({ to: "/batches/$batchId", params: { batchId: b.id } })}>
-                        View batch
-                      </DropdownMenuItem>
-                      <DropdownMenuItem
-                        onClick={() => {
-                          setEditing(b);
-                          setFormOpen(true);
-                        }}
-                      >
-                        <Pencil className="mr-2 size-4" /> Edit
-                      </DropdownMenuItem>
-                      <DropdownMenuItem onClick={() => navigate({ to: "/attendance" })}>
-                        Mark attendance
-                      </DropdownMenuItem>
-                      <DropdownMenuItem className="text-destructive" onClick={() => setToDelete(b)}>
-                        <Trash2 className="mr-2 size-4" /> Delete
-                      </DropdownMenuItem>
-                    </DropdownMenuContent>
-                  </DropdownMenu>
-                </div>
-
-                <div className="flex flex-wrap gap-1.5">
-                  {b.days.map((d) => (
-                    <Badge key={d} variant="secondary" className="text-[11px]">{d}</Badge>
-                  ))}
-                </div>
-
-                <dl className="grid grid-cols-2 gap-3 text-sm">
-                  <div>
-                    <dt className="text-xs text-muted-foreground">Teacher</dt>
-                    <dd className="font-medium">{teacher?.name ?? "Unassigned"}</dd>
-                  </div>
-                  <div>
-                    <dt className="text-xs text-muted-foreground">Timing</dt>
-                    <dd className="font-medium">
-                      {formatTime(b.startTime)} – {formatTime(b.endTime)}
-                    </dd>
-                  </div>
-                  <div>
-                    <dt className="text-xs text-muted-foreground">Students</dt>
-                    <dd className="font-medium">{count}</dd>
-                  </div>
-                  <div>
-                    <dt className="text-xs text-muted-foreground">Attendance</dt>
-                    <dd className="font-medium">{pct(batchAttendancePct(store.attendance, b.id))}</dd>
-                  </div>
-                </dl>
-
-                <div className="flex items-center justify-between border-t border-border pt-3">
-                  <StatusBadge status={b.status} />
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => navigate({ to: "/batches/$batchId", params: { batchId: b.id } })}
+          {Array.from({ length: 6 }).map((_, i) => (
+            <Skeleton key={i} className="h-64 rounded-2xl" />
+          ))}
+        </div>
+      ) : batches.length ? (
+        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+          {batches.map((b) => (
+            <div key={b.id} className="surface-card flex flex-col gap-4 p-5">
+              <div className="flex items-start justify-between gap-2">
+                <div className="min-w-0">
+                  <Link
+                    to="/batches/$batchId"
+                    params={{ batchId: b.id }}
+                    className="font-display text-base font-semibold hover:text-primary"
                   >
-                    Open <Users className="ml-2 size-4" />
-                  </Button>
+                    {b.name}
+                  </Link>
+                  <p className="text-xs text-muted-foreground">
+                    {b.className} · {b.subject}
+                  </p>
                 </div>
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button variant="ghost" size="icon" aria-label="Batch actions">
+                      <MoreVertical className="size-4" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end">
+                    <DropdownMenuItem onClick={() => navigate({ to: "/batches/$batchId", params: { batchId: b.id } })}>
+                      View batch
+                    </DropdownMenuItem>
+                    <DropdownMenuItem
+                      onClick={() => {
+                        setEditing(b);
+                        setFormOpen(true);
+                      }}
+                    >
+                      <Pencil className="mr-2 size-4" /> Edit
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => navigate({ to: "/attendance" })}>
+                      Mark attendance
+                    </DropdownMenuItem>
+                    <DropdownMenuItem className="text-destructive" onClick={() => setToDelete(b)}>
+                      <Trash2 className="mr-2 size-4" /> Delete
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
               </div>
-            );
-          })}
+
+              <div className="flex flex-wrap gap-1.5">
+                {b.days.map((d) => (
+                  <Badge key={d} variant="secondary" className="text-[11px]">{d}</Badge>
+                ))}
+              </div>
+
+              <dl className="grid grid-cols-2 gap-3 text-sm">
+                <div>
+                  <dt className="text-xs text-muted-foreground">Teacher</dt>
+                  <dd className="font-medium">{b.teacherName || "Unassigned"}</dd>
+                </div>
+                <div>
+                  <dt className="text-xs text-muted-foreground">Timing</dt>
+                  <dd className="font-medium">
+                    {formatTime(b.startTime)} – {formatTime(b.endTime)}
+                  </dd>
+                </div>
+                <div>
+                  <dt className="text-xs text-muted-foreground">Students</dt>
+                  <dd className="font-medium">{b.studentCount}</dd>
+                </div>
+                <div>
+                  <dt className="text-xs text-muted-foreground">Attendance</dt>
+                  <dd className="font-medium">{pct(b.attendancePercent)}</dd>
+                </div>
+              </dl>
+
+              <div className="flex items-center justify-between border-t border-border pt-3">
+                <StatusBadge status={b.status} />
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => navigate({ to: "/batches/$batchId", params: { batchId: b.id } })}
+                >
+                  Open <Users className="ml-2 size-4" />
+                </Button>
+              </div>
+            </div>
+          ))}
         </div>
       ) : (
         <SectionCard bodyClassName="p-0">
@@ -228,13 +234,17 @@ function BatchesPage() {
         title={`Delete ${toDelete?.name}?`}
         description="Students in this batch will need to be reassigned."
         confirmLabel="Delete batch"
+        pendingLabel="Deleting…"
         destructive
+        pending={deleteBatch.isPending}
         onConfirm={() => {
-          if (toDelete) {
-            store.deleteBatch(toDelete.id);
-            toast.success("Batch deleted");
-          }
-          setToDelete(null);
+          if (!toDelete) return;
+          deleteBatch.mutate(toDelete.id, {
+            onSuccess: () => {
+              toast.success("Batch deleted");
+              setToDelete(null);
+            },
+          });
         }}
       />
     </AppShell>

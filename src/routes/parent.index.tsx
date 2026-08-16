@@ -8,18 +8,11 @@ import {
   Megaphone,
   Wallet,
 } from "lucide-react";
-import { ParentCard, ParentEmpty, ParentShell, useParentContext } from "@/components/parent/ParentShell";
+import { ParentCard, ParentEmpty, ParentScreenLoading, ParentShell, useParentContext } from "@/components/parent/ParentShell";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
-import { CURRENT_MONTH, TODAY } from "@/data/mock";
-import { studentFeeStatus, weekdayOf } from "@/lib/selectors";
-import {
-  childAttendanceSummary,
-  childExams,
-  childHomework,
-  childSchedule,
-  nextClassFor,
-} from "@/lib/parent";
+import { useParentAuth } from "@/store/parent-auth";
+import { useParentDashboard } from "@/hooks/api";
 import { formatDate, formatTime, inr, pct } from "@/lib/format";
 
 export const Route = createFileRoute("/parent/")({
@@ -38,9 +31,12 @@ export const Route = createFileRoute("/parent/")({
 });
 
 function ParentDashboard() {
-  const { child, account, store } = useParentContext();
+  const { activeChildId } = useParentAuth();
+  const { child } = useParentContext();
+  const studentId = child?.id ?? activeChildId;
+  const { data, isLoading } = useParentDashboard(studentId);
 
-  if (!child) {
+  if (!studentId) {
     return (
       <ParentShell>
         <ParentEmpty
@@ -51,30 +47,26 @@ function ParentDashboard() {
     );
   }
 
-  const batch = store.batches.find((b) => b.id === child.batchId);
-  const teacher = store.teachers.find((t) => t.id === batch?.teacherId);
-  const attendance = childAttendanceSummary(store.attendance, child);
-  const feeStatus = studentFeeStatus(store.feePayments, child, CURRENT_MONTH, store.settings.feeDueDay);
-  const homework = childHomework(store.homework, child);
-  const pendingHw = homework.filter((h) => h.status === "pending");
-  const latest = childExams(store.exams, child)[0];
-  const next = nextClassFor(store.batches, child);
-  const todayClasses = childSchedule(store.batches, child).find(
-    (d) => d.day === weekdayOf(TODAY),
-  );
-  const announcements = store.announcements
-    .filter((a) => a.audience === "all" || a.audience === child.batchId)
-    .slice(0, 2);
+  if (isLoading || !data) {
+    return (
+      <ParentShell>
+        <ParentScreenLoading />
+      </ParentShell>
+    );
+  }
+
+  const latest = data.latestResult;
+  const feeLabel = data.feeStatus === "paid" ? "Paid" : data.feeStatus;
 
   return (
     <ParentShell>
       <div className="rounded-2xl bg-primary p-4 text-primary-foreground">
         <p className="text-xs uppercase tracking-wide text-primary-foreground/80">
-          Namaste {account?.name.split(" ")[0] ?? "Parent"}
+          Namaste {data.parentName.split(" ")[0] || "Parent"}
         </p>
-        <h1 className="mt-1 font-display text-xl font-semibold">{child.name}</h1>
+        <h1 className="mt-1 font-display text-xl font-semibold">{data.child.name}</h1>
         <p className="text-sm text-primary-foreground/85">
-          {child.className} · {batch?.name ?? "No batch"}
+          {data.child.className} · {data.child.batchName || "No batch"}
         </p>
       </div>
 
@@ -83,8 +75,8 @@ function ParentDashboard() {
           <p className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
             <CalendarDays className="size-3.5" /> Attendance
           </p>
-          <p className="mt-1 font-display text-2xl font-semibold">{pct(attendance.percent)}</p>
-          <Progress value={attendance.percent} className="mt-2" />
+          <p className="mt-1 font-display text-2xl font-semibold">{pct(data.attendancePercent)}</p>
+          <Progress value={data.attendancePercent} className="mt-2" />
         </Link>
 
         <Link to="/parent/fees" className="rounded-2xl border border-border bg-background p-4">
@@ -92,16 +84,16 @@ function ParentDashboard() {
             <Wallet className="size-3.5" /> Fees
           </p>
           <p className="mt-1 font-display text-2xl font-semibold capitalize">
-            {feeStatus === "paid" ? "Paid" : feeStatus}
+            {feeLabel}
           </p>
-          <p className="mt-1 text-xs text-muted-foreground">{inr(child.monthlyFee)} this month</p>
+          <p className="mt-1 text-xs text-muted-foreground">{inr(data.monthlyFee)} this month</p>
         </Link>
 
         <Link to="/parent/homework" className="rounded-2xl border border-border bg-background p-4">
           <p className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
             <ClipboardList className="size-3.5" /> Homework
           </p>
-          <p className="mt-1 font-display text-2xl font-semibold">{pendingHw.length}</p>
+          <p className="mt-1 font-display text-2xl font-semibold">{data.pendingHomeworkCount}</p>
           <p className="mt-1 text-xs text-muted-foreground">pending</p>
         </Link>
 
@@ -113,24 +105,24 @@ function ParentDashboard() {
             {latest ? pct(latest.percent) : "—"}
           </p>
           <p className="mt-1 truncate text-xs text-muted-foreground">
-            {latest ? latest.exam.subject : "No result yet"}
+            {latest ? latest.subject : "No result yet"}
           </p>
         </Link>
       </div>
 
       <ParentCard title="Next class">
-        {next ? (
+        {data.nextClass ? (
           <div className="flex items-center gap-3">
             <span className="grid size-11 place-items-center rounded-xl bg-primary-soft text-primary">
               <CalendarClock className="size-5" />
             </span>
             <div className="min-w-0 flex-1">
-              <p className="truncate font-display text-base font-semibold">{next.batch.subject}</p>
+              <p className="truncate font-display text-base font-semibold">{data.nextClass.subject}</p>
               <p className="text-sm text-muted-foreground">
-                {next.isToday ? "Today" : next.day} · {formatTime(next.batch.startTime)} – {formatTime(next.batch.endTime)}
+                {data.nextClass.isToday ? "Today" : data.nextClass.day} · {formatTime(data.nextClass.startTime)} – {formatTime(data.nextClass.endTime)}
               </p>
               <p className="text-xs text-muted-foreground">
-                {next.batch.room} · {store.teachers.find((t) => t.id === next.batch.teacherId)?.name ?? "Teacher"}
+                {data.nextClass.room} · {data.nextClass.teacherName}
               </p>
             </div>
           </div>
@@ -144,11 +136,11 @@ function ParentDashboard() {
         </Button>
       </ParentCard>
 
-      <ParentCard title={`Today's classes (${todayClasses?.classes.length ?? 0})`}>
-        {todayClasses?.classes.length ? (
+      <ParentCard title={`Today's classes (${data.todayClasses.length})`}>
+        {data.todayClasses.length ? (
           <ul className="space-y-2">
-            {todayClasses.classes.map((b) => (
-              <li key={b.id} className="flex items-center justify-between gap-2 rounded-xl bg-muted/50 p-3">
+            {data.todayClasses.map((b) => (
+              <li key={b.batchId} className="flex items-center justify-between gap-2 rounded-xl bg-muted/50 p-3">
                 <span className="min-w-0">
                   <span className="block truncate text-sm font-medium">{b.subject}</span>
                   <span className="text-xs text-muted-foreground">{b.room}</span>
@@ -170,9 +162,9 @@ function ParentDashboard() {
           </Link>
         }
       >
-        {pendingHw.length ? (
+        {data.pendingHomework.length ? (
           <ul className="space-y-2">
-            {pendingHw.slice(0, 3).map((h) => (
+            {data.pendingHomework.map((h) => (
               <li key={h.id} className="rounded-xl border border-border p-3">
                 <p className="text-sm font-medium">{h.title}</p>
                 <p className="mt-0.5 flex items-center justify-between text-xs text-muted-foreground">
@@ -197,14 +189,12 @@ function ParentDashboard() {
       >
         {latest ? (
           <div>
-            <p className="font-display text-base font-semibold">{latest.exam.name}</p>
-            <p className="text-xs text-muted-foreground">
-              {latest.exam.subject} · {formatDate(latest.exam.date)}
-            </p>
+            <p className="font-display text-base font-semibold">{latest.examName}</p>
+            <p className="text-xs text-muted-foreground">{latest.subject}</p>
             <div className="mt-3 flex items-end justify-between">
               <p className="font-display text-2xl font-semibold">
                 {latest.marks}
-                <span className="text-sm text-muted-foreground">/{latest.exam.maxMarks}</span>
+                <span className="text-sm text-muted-foreground">/{latest.maxMarks}</span>
               </p>
               <p className="text-xs text-muted-foreground">
                 Class average {pct(latest.classAveragePct)}
@@ -225,9 +215,9 @@ function ParentDashboard() {
           </Link>
         }
       >
-        {announcements.length ? (
+        {data.announcements.length ? (
           <ul className="space-y-3">
-            {announcements.map((a) => (
+            {data.announcements.map((a) => (
               <li key={a.id} className="flex gap-3">
                 <span className="mt-0.5 grid size-8 shrink-0 place-items-center rounded-lg bg-accent-soft text-accent-foreground">
                   <Megaphone className="size-4" />
@@ -255,7 +245,7 @@ function ParentDashboard() {
           <Button asChild variant="outline" size="sm"><Link to="/parent/notifications">Notifications</Link></Button>
         </div>
         <div className="mt-3 rounded-xl bg-muted/50 p-3 text-xs text-muted-foreground">
-          Class teacher: {teacher?.name ?? "—"} · {teacher?.phone ?? ""}
+          Class teacher: {data.teacher.name} · {data.teacher.phone}
         </div>
       </ParentCard>
       <div className="pb-2" />

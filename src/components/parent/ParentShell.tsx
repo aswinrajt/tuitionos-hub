@@ -1,5 +1,6 @@
 import { Link, useNavigate, useRouterState } from "@tanstack/react-router";
 import { useEffect, type ReactNode } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import {
   Bell,
   CalendarDays,
@@ -12,6 +13,7 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Spinner } from "@/components/common/Spinner";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -21,12 +23,9 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { useParentAuth } from "@/store/parent-auth";
-import { useStore } from "@/store/tuition-store";
-import { CURRENT_MONTH } from "@/data/mock";
-import { parentNotifications } from "@/lib/parent";
-import { initials } from "@/lib/format";
+import { useParentMe, useParentNotifications } from "@/hooks/api";
+import { CURRENT_MONTH, initials } from "@/lib/format";
 import { cn } from "@/lib/utils";
-import type { ParentAccount, Student } from "@/data/types";
 import { toast } from "sonner";
 
 export const parentNav = [
@@ -39,19 +38,14 @@ export const parentNav = [
 
 /** Everything a parent page needs: account, children, and the selected child. */
 export function useParentContext() {
-  const { parent, activeChildId, setActiveChildId } = useParentAuth();
-  const store = useStore();
+  const { activeChildId, setActiveChildId } = useParentAuth();
+  const me = useParentMe();
 
-  const account: ParentAccount | null =
-    store.parentAccounts.find((p) => p.id === parent?.parentId) ?? null;
-  const children: Student[] = account
-    ? (account.studentIds
-        .map((id) => store.students.find((s) => s.id === id))
-        .filter(Boolean) as Student[])
-    : [];
+  const account = me.data?.parent ?? null;
+  const children = me.data?.children ?? [];
   const child = children.find((c) => c.id === activeChildId) ?? children[0] ?? null;
 
-  return { account, children, child, setActiveChildId, store };
+  return { account, children, child, setActiveChildId };
 }
 
 function ChildSwitcher() {
@@ -146,33 +140,39 @@ export function ParentPageTitle({
   );
 }
 
+export function ParentScreenLoading() {
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center gap-3 rounded-2xl bg-primary-soft px-4 py-3 text-primary">
+        <Spinner className="size-5" />
+        <p className="text-sm font-medium">Loading…</p>
+      </div>
+      <Skeleton className="h-10 w-48 rounded-xl" />
+      <div className="grid grid-cols-2 gap-3">
+        {Array.from({ length: 4 }).map((_, i) => (
+          <Skeleton key={i} className="h-24 rounded-2xl" />
+        ))}
+      </div>
+      <Skeleton className="h-40 rounded-2xl" />
+    </div>
+  );
+}
+
 export function ParentShell({ children }: { children: ReactNode }) {
-  const { parent, ready, logout } = useParentAuth();
+  const { parent, ready, logout, activeChildId } = useParentAuth();
+  const { child } = useParentContext();
+  const me = useParentMe();
+  const notes = useParentNotifications(child?.id ?? activeChildId);
   const navigate = useNavigate();
-  const store = useStore();
+  const qc = useQueryClient();
 
   useEffect(() => {
     if (ready && !parent) navigate({ to: "/parent/login" });
   }, [ready, parent, navigate]);
 
-  const account = store.parentAccounts.find((p) => p.id === parent?.parentId);
-  const firstChild = account
-    ? store.students.find((s) => s.id === account.studentIds[0])
-    : undefined;
+  const unread = (notes.data ?? []).filter((n) => n.date >= CURRENT_MONTH).length;
 
-  const unread = firstChild
-    ? parentNotifications({
-        student: firstChild,
-        attendance: store.attendance,
-        payments: store.feePayments,
-        homework: store.homework,
-        exams: store.exams,
-        announcements: store.announcements,
-        dueDay: store.settings.feeDueDay,
-      }).filter((n) => n.date >= CURRENT_MONTH).length
-    : 0;
-
-  if (!ready || !parent) {
+  if (!ready || !parent || me.isLoading) {
     return (
       <div className="mx-auto max-w-md space-y-4 p-5">
         <Skeleton className="h-12 w-full rounded-2xl" />
@@ -219,9 +219,12 @@ export function ParentShell({ children }: { children: ReactNode }) {
                 </DropdownMenuItem>
                 <DropdownMenuItem
                   onClick={() => {
-                    logout();
-                    toast.success("Signed out");
-                    navigate({ to: "/parent/login", replace: true });
+                    void (async () => {
+                      await logout();
+                      qc.removeQueries({ queryKey: ["parent"] });
+                      toast.success("Signed out");
+                      navigate({ to: "/parent/login", replace: true });
+                    })();
                   }}
                 >
                   <LogOut className="mr-2 size-4" /> Logout

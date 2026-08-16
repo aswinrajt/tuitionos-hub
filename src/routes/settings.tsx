@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Bell, Building2, IndianRupee, ListChecks, LogOut, Plus, X } from "lucide-react";
 import { AppShell } from "@/components/layout/AppShell";
 import { PageHeader } from "@/components/common/PageHeader";
@@ -12,11 +12,12 @@ import { Switch } from "@/components/ui/switch";
 import { Separator } from "@/components/ui/separator";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { useStore } from "@/store/tuition-store";
+import { Skeleton } from "@/components/ui/skeleton";
 import { useAuth } from "@/store/auth";
 import { inr } from "@/lib/format";
 import { toast } from "sonner";
 import type { CentreSettings } from "@/data/types";
+import { useBatches, useSettings, useStudents, useTeachers, useUpdateSettings } from "@/hooks/api";
 
 export const Route = createFileRoute("/settings")({
   head: () => ({
@@ -34,18 +35,26 @@ export const Route = createFileRoute("/settings")({
 });
 
 function SettingsPage() {
-  const store = useStore();
+  const { data: settings } = useSettings();
+  const { data: students = [] } = useStudents();
+  const { data: batches = [] } = useBatches();
+  const { data: teachers } = useTeachers();
+  const updateSettings = useUpdateSettings();
   const { user, logout } = useAuth();
-  const [draft, setDraft] = useState<CentreSettings>(store.settings);
+  const [draft, setDraft] = useState<CentreSettings | null>(null);
   const [newClass, setNewClass] = useState("");
   const [newSubject, setNewSubject] = useState("");
 
+  useEffect(() => {
+    if (settings) setDraft(settings);
+  }, [settings]);
+
   const set = <K extends keyof CentreSettings>(key: K, value: CentreSettings[K]) =>
-    setDraft((d) => ({ ...d, [key]: value }));
+    setDraft((d) => (d ? { ...d, [key]: value } : d));
 
   const save = () => {
-    store.updateSettings(draft);
-    toast.success("Settings saved");
+    if (!draft) return;
+    updateSettings.mutate(draft, { onSuccess: () => toast.success("Settings saved") });
   };
 
   const toggles: { key: keyof CentreSettings; label: string; hint: string }[] = [
@@ -56,12 +65,21 @@ function SettingsPage() {
     { key: "weeklyReport", label: "Weekly owner report", hint: "Email summary of collections and attendance every Monday." },
   ];
 
+  if (!draft) {
+    return (
+      <AppShell>
+        <Skeleton className="h-10 w-48" />
+        <Skeleton className="h-96" />
+      </AppShell>
+    );
+  }
+
   return (
     <AppShell>
       <PageHeader
         title="Settings"
         description="Centre profile, fee rules, academics and notifications."
-        actions={<Button onClick={save}>Save changes</Button>}
+        actions={<Button onClick={save} loading={updateSettings.isPending}>{updateSettings.isPending ? "Saving…" : "Save changes"}</Button>}
       />
 
       <Tabs defaultValue="centre" className="space-y-5">
@@ -115,7 +133,7 @@ function SettingsPage() {
                   </p>
                 </div>
               </div>
-              <Button variant="outline" onClick={logout}>
+              <Button variant="outline" onClick={() => void logout()}>
                 <LogOut className="mr-2 size-4" /> Sign out
               </Button>
             </div>
@@ -158,7 +176,7 @@ function SettingsPage() {
               <p>
                 Expected monthly collection at current enrolment:{" "}
                 <span className="font-semibold text-foreground">
-                  {inr(store.students.filter((s) => s.status === "active").reduce((sum, s) => sum + s.monthlyFee, 0))}
+                  {inr(students.filter((s) => s.status === "active").reduce((sum, s) => sum + s.monthlyFee, 0))}
                 </span>
               </p>
             </div>
@@ -189,13 +207,13 @@ function SettingsPage() {
           <SectionCard title="Snapshot">
             <ul className="grid gap-2 text-sm sm:grid-cols-3">
               <li className="flex items-center gap-2 rounded-xl border border-border p-3">
-                <ListChecks className="size-4 text-primary" /> {store.batches.length} batches
+                <ListChecks className="size-4 text-primary" /> {batches.length} batches
               </li>
               <li className="flex items-center gap-2 rounded-xl border border-border p-3">
-                <ListChecks className="size-4 text-primary" /> {store.students.length} students
+                <ListChecks className="size-4 text-primary" /> {students.length} students
               </li>
               <li className="flex items-center gap-2 rounded-xl border border-border p-3">
-                <ListChecks className="size-4 text-primary" /> {store.teachers.length} teachers
+                <ListChecks className="size-4 text-primary" /> {teachers?.rows.length ?? 0} teachers
               </li>
             </ul>
           </SectionCard>
@@ -224,7 +242,7 @@ function SettingsPage() {
       </Tabs>
 
       <div className="flex justify-end">
-        <Button onClick={save}>Save changes</Button>
+        <Button onClick={save} loading={updateSettings.isPending}>{updateSettings.isPending ? "Saving…" : "Save changes"}</Button>
       </div>
     </AppShell>
   );

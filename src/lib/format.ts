@@ -1,3 +1,27 @@
+export const WEEKDAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"] as const;
+
+export function todayYmd(now = new Date()) {
+  const y = now.getFullYear();
+  const m = String(now.getMonth() + 1).padStart(2, "0");
+  const d = String(now.getDate()).padStart(2, "0");
+  return `${y}-${m}-${d}`;
+}
+
+export const TODAY = todayYmd();
+export const CURRENT_MONTH = TODAY.slice(0, 7);
+
+export function monthOffset(offset: number, from = CURRENT_MONTH) {
+  const [y, m] = from.split("-").map(Number) as [number, number];
+  const d = new Date(y, m - 1 + offset, 1);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+}
+
+export function shift(days: number, from = TODAY) {
+  const d = new Date(`${from}T12:00:00`);
+  d.setDate(d.getDate() + days);
+  return todayYmd(d);
+}
+
 export const inr = (value: number, opts?: { compact?: boolean }) => {
   if (opts?.compact && Math.abs(value) >= 100000)
     return `₹${(value / 100000).toFixed(1)}L`;

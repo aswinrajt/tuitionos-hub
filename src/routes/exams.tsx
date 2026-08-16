@@ -9,16 +9,22 @@ import { StatCard } from "@/components/common/StatCard";
 import { EmptyState } from "@/components/common/EmptyState";
 import { ConfirmDialog } from "@/components/common/ConfirmDialog";
 import { FormModal, Field } from "@/components/common/FormModal";
+import { PageSkeleton } from "@/components/common/Spinner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Progress } from "@/components/ui/progress";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { useStore } from "@/store/tuition-store";
-import { TODAY } from "@/data/mock";
-import { examStats } from "@/lib/selectors";
-import { formatDate, initials, pct } from "@/lib/format";
-import type { Exam } from "@/data/types";
+import {
+  type ExamRow,
+  useBatches,
+  useCreateExam,
+  useDeleteExam,
+  useExams,
+  useSaveExamMarks,
+  useSettings,
+} from "@/hooks/api";
+import { TODAY, formatDate, initials, pct } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 
@@ -38,15 +44,21 @@ export const Route = createFileRoute("/exams")({
 });
 
 function ExamsPage() {
-  const store = useStore();
+  const { data: batches = [] } = useBatches();
+  const { data: settings } = useSettings();
+  const { data, isLoading } = useExams();
+  const exams = data ?? [];
+  const createExam = useCreateExam();
+  const saveExamMarks = useSaveExamMarks();
+  const deleteExam = useDeleteExam();
   const [createOpen, setCreateOpen] = useState(false);
-  const [marksFor, setMarksFor] = useState<Exam | null>(null);
-  const [toDelete, setToDelete] = useState<Exam | null>(null);
-  const [selectedId, setSelectedId] = useState(store.exams[0]?.id ?? "");
+  const [marksFor, setMarksFor] = useState<ExamRow | null>(null);
+  const [toDelete, setToDelete] = useState<ExamRow | null>(null);
+  const [selectedId, setSelectedId] = useState("");
   const [draft, setDraft] = useState({
     name: "",
-    batchId: store.batches[0]?.id ?? "",
-    subject: store.batches[0]?.subject ?? "Mathematics",
+    batchId: "",
+    subject: "Mathematics",
     date: TODAY,
     maxMarks: 50,
   });
@@ -55,25 +67,32 @@ function ExamsPage() {
   useEffect(() => {
     if (!marksFor) return;
     const next: Record<string, string> = {};
-    store.students
-      .filter((s) => s.batchId === marksFor.batchId && s.status === "active")
-      .forEach((s) => {
-        const value = marksFor.results.find((r) => r.studentId === s.id)?.marks;
-        next[s.id] = value === null || value === undefined ? "" : String(value);
-      });
+    marksFor.results.forEach((r) => {
+      next[r.studentId] = r.marks === null || r.marks === undefined ? "" : String(r.marks);
+    });
     setMarks(next);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [marksFor]);
 
-  const selected = store.exams.find((e) => e.id === selectedId) ?? store.exams[0];
-  const stats = selected ? examStats(selected) : null;
+  const selected = exams.find((e) => e.id === selectedId) ?? exams[0];
+  const stats = selected?.stats;
   const chartData = selected
     ? selected.results.map((r) => ({
-        name: store.students.find((s) => s.id === r.studentId)?.name.split(" ")[0] ?? "—",
+        name: r.studentName.split(" ")[0] ?? "—",
         marks: r.marks ?? 0,
-        percent: ((r.marks ?? 0) / selected.maxMarks) * 100,
+        percent: r.percent,
       }))
     : [];
+
+  const openCreate = () => {
+    setDraft({
+      name: "",
+      batchId: batches[0]?.id ?? "",
+      subject: batches[0]?.subject ?? settings?.subjects[0] ?? "Mathematics",
+      date: TODAY,
+      maxMarks: 50,
+    });
+    setCreateOpen(true);
+  };
 
   return (
     <AppShell>
@@ -81,31 +100,32 @@ function ExamsPage() {
         title="Exams & results"
         description="Record tests, enter marks and track class performance."
         actions={
-          <Button onClick={() => setCreateOpen(true)}>
+          <Button onClick={openCreate}>
             <Plus className="mr-2 size-4" /> Create exam
           </Button>
         }
       />
 
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        <StatCard label="Exams recorded" value={store.exams.length} icon={BookOpen} />
+        <StatCard label="Exams recorded" value={exams.length} icon={BookOpen} />
         <StatCard label="Class average" value={stats ? pct(stats.averagePct) : "—"} hint={selected?.name} icon={TrendingUp} tone="info" />
         <StatCard label="Highest score" value={stats ? `${stats.highest}/${selected?.maxMarks ?? 0}` : "—"} icon={Award} tone="accent" />
         <StatCard label="Pass rate" value={stats ? pct(stats.passRate) : "—"} hint="35% and above" icon={ClipboardCheck} tone="success" />
       </div>
 
-      {store.exams.length ? (
+      {isLoading ? (
+        <PageSkeleton cards={0} tiles={3} />
+      ) : exams.length ? (
         <>
           <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-            {store.exams.map((e) => {
-              const s = examStats(e);
-              const batch = store.batches.find((b) => b.id === e.batchId);
+            {exams.map((e) => {
+              const s = e.stats;
               return (
                 <div
                   key={e.id}
                   className={cn(
                     "surface-card cursor-pointer p-5 transition-all hover:-translate-y-0.5",
-                    selectedId === e.id && "ring-2 ring-primary",
+                    selected?.id === e.id && "ring-2 ring-primary",
                   )}
                   onClick={() => setSelectedId(e.id)}
                 >
@@ -114,7 +134,7 @@ function ExamsPage() {
                       <p className="text-xs font-semibold uppercase tracking-wide text-primary">{e.subject}</p>
                       <h3 className="font-display text-base font-semibold">{e.name}</h3>
                       <p className="text-xs text-muted-foreground">
-                        {batch?.name} · {formatDate(e.date)} · max {e.maxMarks}
+                        {e.batchName} · {formatDate(e.date)} · max {e.maxMarks}
                       </p>
                     </div>
                     <span className="font-display text-lg font-semibold">{pct(s.averagePct)}</span>
@@ -189,24 +209,20 @@ function ExamsPage() {
                   {selected.results
                     .slice()
                     .sort((a, b) => (b.marks ?? 0) - (a.marks ?? 0))
-                    .map((r, idx) => {
-                      const student = store.students.find((s) => s.id === r.studentId);
-                      const percent = ((r.marks ?? 0) / selected.maxMarks) * 100;
-                      return (
-                        <li key={r.studentId} className="flex items-center gap-3 px-4 py-3">
-                          <span className="grid size-9 place-items-center rounded-full bg-primary-soft text-xs font-bold text-primary">
-                            {student ? initials(student.name) : "?"}
-                          </span>
-                          <div className="min-w-0 flex-1">
-                            <p className="truncate text-sm font-medium">{student?.name ?? "Unknown"}</p>
-                            <p className="text-xs text-muted-foreground">Rank #{idx + 1} · {pct(percent)}</p>
-                          </div>
-                          <span className="font-display text-sm font-semibold">
-                            {r.marks ?? "—"}/{selected.maxMarks}
-                          </span>
-                        </li>
-                      );
-                    })}
+                    .map((r) => (
+                      <li key={r.studentId} className="flex items-center gap-3 px-4 py-3">
+                        <span className="grid size-9 place-items-center rounded-full bg-primary-soft text-xs font-bold text-primary">
+                          {initials(r.studentName)}
+                        </span>
+                        <div className="min-w-0 flex-1">
+                          <p className="truncate text-sm font-medium">{r.studentName}</p>
+                          <p className="text-xs text-muted-foreground">Rank #{r.rank} · {pct(r.percent)}</p>
+                        </div>
+                        <span className="font-display text-sm font-semibold">
+                          {r.marks ?? "—"}/{selected.maxMarks}
+                        </span>
+                      </li>
+                    ))}
                 </ul>
               </SectionCard>
             </div>
@@ -218,7 +234,7 @@ function ExamsPage() {
             icon={BookOpen}
             title="No exams yet"
             description="Create your first exam and enter marks to see class performance."
-            action={<Button size="sm" onClick={() => setCreateOpen(true)}>Create exam</Button>}
+            action={<Button size="sm" onClick={openCreate}>Create exam</Button>}
           />
         </SectionCard>
       )}
@@ -229,21 +245,34 @@ function ExamsPage() {
         title="Create exam"
         description="Set up a test for a batch, then enter marks."
         submitLabel="Create exam"
+        pending={createExam.isPending}
+        pendingLabel="Creating exam…"
         onSubmit={() => {
           if (!draft.name.trim()) {
             toast.error("Exam name is required");
             return;
           }
-          const exam = store.addExam({
-            ...draft,
-            results: store.students
-              .filter((s) => s.batchId === draft.batchId && s.status === "active")
-              .map((s) => ({ studentId: s.id, marks: null })),
-          });
-          setSelectedId(exam.id);
-          setCreateOpen(false);
-          setMarksFor(exam);
-          toast.success("Exam created — enter marks now");
+          if (!draft.batchId) {
+            toast.error("Select a batch");
+            return;
+          }
+          createExam.mutate(
+            {
+              name: draft.name,
+              batchId: draft.batchId,
+              subject: draft.subject,
+              date: draft.date,
+              maxMarks: draft.maxMarks,
+            },
+            {
+              onSuccess: (exam) => {
+                setSelectedId(exam.id);
+                setCreateOpen(false);
+                setMarksFor(exam);
+                toast.success("Exam created — enter marks now");
+              },
+            },
+          );
         }}
       >
         <div className="grid gap-4 sm:grid-cols-2">
@@ -252,15 +281,15 @@ function ExamsPage() {
           </Field>
           <Field label="Batch">
             <Select
-              value={draft.batchId}
+              value={draft.batchId || undefined}
               onValueChange={(v) => {
-                const b = store.batches.find((x) => x.id === v);
+                const b = batches.find((x) => x.id === v);
                 setDraft({ ...draft, batchId: v, subject: b?.subject ?? draft.subject });
               }}
             >
               <SelectTrigger><SelectValue /></SelectTrigger>
               <SelectContent>
-                {store.batches.map((b) => <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>)}
+                {batches.map((b) => <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>)}
               </SelectContent>
             </Select>
           </Field>
@@ -268,7 +297,7 @@ function ExamsPage() {
             <Select value={draft.subject} onValueChange={(v) => setDraft({ ...draft, subject: v })}>
               <SelectTrigger><SelectValue /></SelectTrigger>
               <SelectContent>
-                {store.settings.subjects.map((s) => <SelectItem key={s} value={s}>{s}</SelectItem>)}
+                {(settings?.subjects ?? []).map((s) => <SelectItem key={s} value={s}>{s}</SelectItem>)}
               </SelectContent>
             </Select>
           </Field>
@@ -281,8 +310,18 @@ function ExamsPage() {
         </div>
       </FormModal>
 
-      <Dialog open={!!marksFor} onOpenChange={(o) => !o && setMarksFor(null)}>
-        <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-lg">
+      <Dialog
+        open={!!marksFor}
+        onOpenChange={(o) => {
+          if (!saveExamMarks.isPending && !o) setMarksFor(null);
+        }}
+      >
+        <DialogContent
+          showClose={!saveExamMarks.isPending}
+          className="max-h-[90vh] overflow-y-auto sm:max-w-lg"
+          onPointerDownOutside={(e) => saveExamMarks.isPending && e.preventDefault()}
+          onEscapeKeyDown={(e) => saveExamMarks.isPending && e.preventDefault()}
+        >
           <DialogHeader>
             <DialogTitle>Enter marks — {marksFor?.name}</DialogTitle>
           </DialogHeader>
@@ -292,44 +331,49 @@ function ExamsPage() {
                 Maximum marks: {marksFor.maxMarks}. Percentage is calculated automatically.
               </p>
               <ul className="space-y-2">
-                {store.students
-                  .filter((s) => s.batchId === marksFor.batchId && s.status === "active")
-                  .map((s) => {
-                    const value = marks[s.id] ?? "";
-                    const percent = value ? (Number(value) / marksFor.maxMarks) * 100 : null;
-                    return (
-                      <li key={s.id} className="flex items-center gap-3 rounded-xl border border-border px-3 py-2">
-                        <span className="flex-1 text-sm font-medium">{s.name}</span>
-                        <span className="w-14 text-right text-xs text-muted-foreground">
-                          {percent === null ? "—" : pct(percent)}
-                        </span>
-                        <Input
-                          type="number"
-                          className="w-20"
-                          max={marksFor.maxMarks}
-                          value={value}
-                          onChange={(e) => setMarks({ ...marks, [s.id]: e.target.value })}
-                        />
-                      </li>
-                    );
-                  })}
+                {marksFor.results.map((r) => {
+                  const value = marks[r.studentId] ?? "";
+                  const percent = value ? (Number(value) / marksFor.maxMarks) * 100 : null;
+                  return (
+                    <li key={r.studentId} className="flex items-center gap-3 rounded-xl border border-border px-3 py-2">
+                      <span className="flex-1 text-sm font-medium">{r.studentName}</span>
+                      <span className="w-14 text-right text-xs text-muted-foreground">
+                        {percent === null ? "—" : pct(percent)}
+                      </span>
+                      <Input
+                        type="number"
+                        className="w-20"
+                        max={marksFor.maxMarks}
+                        value={value}
+                        onChange={(e) => setMarks({ ...marks, [r.studentId]: e.target.value })}
+                      />
+                    </li>
+                  );
+                })}
               </ul>
               <DialogFooter>
-                <Button variant="outline" onClick={() => setMarksFor(null)}>Cancel</Button>
+                <Button variant="outline" disabled={saveExamMarks.isPending} onClick={() => setMarksFor(null)}>Cancel</Button>
                 <Button
+                  loading={saveExamMarks.isPending}
                   onClick={() => {
-                    store.saveExamMarks(
-                      marksFor.id,
-                      Object.entries(marks).map(([studentId, v]) => ({
-                        studentId,
-                        marks: v === "" ? null : Number(v),
-                      })),
+                    saveExamMarks.mutate(
+                      {
+                        id: marksFor.id,
+                        results: Object.entries(marks).map(([studentId, v]) => ({
+                          studentId,
+                          marks: v === "" ? null : Number(v),
+                        })),
+                      },
+                      {
+                        onSuccess: () => {
+                          toast.success("Marks saved");
+                          setMarksFor(null);
+                        },
+                      },
                     );
-                    toast.success("Marks saved");
-                    setMarksFor(null);
                   }}
                 >
-                  Save marks
+                  {saveExamMarks.isPending ? "Saving marks…" : "Save marks"}
                 </Button>
               </DialogFooter>
             </div>
@@ -343,13 +387,17 @@ function ExamsPage() {
         title="Delete this exam?"
         description={`${toDelete?.name} and all recorded marks will be removed.`}
         confirmLabel="Delete exam"
+        pendingLabel="Deleting…"
         destructive
+        pending={deleteExam.isPending}
         onConfirm={() => {
-          if (toDelete) {
-            store.deleteExam(toDelete.id);
-            toast.success("Exam deleted");
-          }
-          setToDelete(null);
+          if (!toDelete) return;
+          deleteExam.mutate(toDelete.id, {
+            onSuccess: () => {
+              toast.success("Exam deleted");
+              setToDelete(null);
+            },
+          });
         }}
       />
     </AppShell>

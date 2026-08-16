@@ -2,8 +2,8 @@ import { useEffect, useState } from "react";
 import { FormModal, Field } from "@/components/common/FormModal";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { useStore } from "@/store/tuition-store";
-import { WEEKDAYS } from "@/data/mock";
+import { useCreateBatch, useSettings, useTeachers, useUpdateBatch } from "@/hooks/api";
+import { WEEKDAYS } from "@/lib/format";
 import type { Batch } from "@/data/types";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
@@ -17,11 +17,17 @@ export function BatchFormModal({
   onOpenChange: (open: boolean) => void;
   batch?: Batch;
 }) {
-  const { teachers, settings, addBatch, updateBatch } = useStore();
+  const { data: teachersData } = useTeachers();
+  const { data: settings } = useSettings();
+  const createBatch = useCreateBatch();
+  const updateBatch = useUpdateBatch();
+  const teachers = teachersData?.rows ?? [];
+  const classes = settings?.classes ?? [];
+  const subjects = settings?.subjects ?? [];
   const blank = {
     name: "",
-    className: settings.classes[4] ?? "Class 10",
-    subject: settings.subjects[0] ?? "Mathematics",
+    className: classes[4] ?? "Class 10",
+    subject: subjects[0] ?? "Mathematics",
     teacherId: teachers[0]?.id ?? "",
     days: ["Mon", "Wed", "Fri"] as string[],
     startTime: "17:00",
@@ -32,7 +38,22 @@ export function BatchFormModal({
   const [draft, setDraft] = useState<Omit<Batch, "id">>(blank);
 
   useEffect(() => {
-    if (open) setDraft(batch ? { ...batch } : blank);
+    if (open)
+      setDraft(
+        batch
+          ? {
+              name: batch.name,
+              className: batch.className,
+              subject: batch.subject,
+              teacherId: batch.teacherId,
+              days: batch.days,
+              startTime: batch.startTime,
+              endTime: batch.endTime,
+              room: batch.room,
+              status: batch.status,
+            }
+          : blank,
+      );
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, batch]);
 
@@ -50,6 +71,8 @@ export function BatchFormModal({
       title={batch ? "Edit batch" : "Create batch"}
       description="A batch groups students by class, subject, teacher and schedule."
       submitLabel={batch ? "Save changes" : "Create batch"}
+      pending={createBatch.isPending || updateBatch.isPending}
+      pendingLabel={batch ? "Saving…" : "Creating batch…"}
       onSubmit={() => {
         if (!draft.name.trim()) {
           toast.error("Batch name is required");
@@ -60,13 +83,23 @@ export function BatchFormModal({
           return;
         }
         if (batch) {
-          updateBatch(batch.id, draft);
-          toast.success(`${draft.name} updated`);
+          updateBatch.mutate(
+            { id: batch.id, ...draft },
+            {
+              onSuccess: () => {
+                toast.success(`${draft.name} updated`);
+                onOpenChange(false);
+              },
+            },
+          );
         } else {
-          addBatch(draft);
-          toast.success(`${draft.name} created`);
+          createBatch.mutate(draft, {
+            onSuccess: () => {
+              toast.success(`${draft.name} created`);
+              onOpenChange(false);
+            },
+          });
         }
-        onOpenChange(false);
       }}
     >
       <div className="grid gap-4 sm:grid-cols-2">
@@ -77,7 +110,7 @@ export function BatchFormModal({
           <Select value={draft.className} onValueChange={(v) => setDraft({ ...draft, className: v })}>
             <SelectTrigger><SelectValue /></SelectTrigger>
             <SelectContent>
-              {settings.classes.map((c) => <SelectItem key={c} value={c}>{c}</SelectItem>)}
+              {classes.map((c) => <SelectItem key={c} value={c}>{c}</SelectItem>)}
             </SelectContent>
           </Select>
         </Field>
@@ -85,7 +118,7 @@ export function BatchFormModal({
           <Select value={draft.subject} onValueChange={(v) => setDraft({ ...draft, subject: v })}>
             <SelectTrigger><SelectValue /></SelectTrigger>
             <SelectContent>
-              {settings.subjects.map((s) => <SelectItem key={s} value={s}>{s}</SelectItem>)}
+              {subjects.map((s) => <SelectItem key={s} value={s}>{s}</SelectItem>)}
             </SelectContent>
           </Select>
         </Field>

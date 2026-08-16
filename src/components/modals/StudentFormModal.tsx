@@ -3,8 +3,8 @@ import { FormModal, Field } from "@/components/common/FormModal";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
-import { useStore } from "@/store/tuition-store";
-import { TODAY } from "@/data/mock";
+import { useBatches, useCreateStudent, useSettings, useUpdateStudent } from "@/hooks/api";
+import { TODAY } from "@/lib/format";
 import type { Student } from "@/data/types";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
@@ -33,17 +33,37 @@ export function StudentFormModal({
   onOpenChange: (open: boolean) => void;
   student?: Student;
 }) {
-  const { batches, settings, addStudent, updateStudent } = useStore();
-  const [draft, setDraft] = useState<Omit<Student, "id">>(() => emptyDraft(batches[0]?.id ?? "", settings.classes[4] ?? "Class 10"));
+  const { data: batches = [] } = useBatches();
+  const { data: settings } = useSettings();
+  const createStudent = useCreateStudent();
+  const updateStudent = useUpdateStudent();
+  const classes = settings?.classes ?? [];
+  const subjects = settings?.subjects ?? [];
+  const [draft, setDraft] = useState<Omit<Student, "id">>(() =>
+    emptyDraft(batches[0]?.id ?? "", classes[4] ?? "Class 10"),
+  );
 
   useEffect(() => {
     if (open)
       setDraft(
         student
-          ? { ...student }
-          : emptyDraft(batches[0]?.id ?? "", settings.classes[4] ?? "Class 10"),
+          ? {
+              name: student.name,
+              phone: student.phone,
+              parentName: student.parentName,
+              parentPhone: student.parentPhone,
+              className: student.className,
+              batchId: student.batchId,
+              subjects: student.subjects,
+              joiningDate: student.joiningDate,
+              monthlyFee: student.monthlyFee,
+              status: student.status,
+              gender: student.gender,
+              address: student.address,
+            }
+          : emptyDraft(batches[0]?.id ?? "", classes[4] ?? "Class 10"),
       );
-  }, [open, student, batches, settings.classes]);
+  }, [open, student, batches, classes]);
 
   const toggleSubject = (subject: string) =>
     setDraft((d) => ({
@@ -61,19 +81,31 @@ export function StudentFormModal({
       title={student ? "Edit student" : "Add student"}
       description={student ? "Update the student record." : "Admit a new student to your centre."}
       submitLabel={student ? "Save changes" : "Add student"}
+      pending={createStudent.isPending || updateStudent.isPending}
+      pendingLabel={student ? "Saving…" : "Adding student…"}
       onSubmit={() => {
         if (!draft.name.trim()) {
           toast.error("Student name is required");
           return;
         }
         if (student) {
-          updateStudent(student.id, draft);
-          toast.success(`${draft.name} updated`);
+          updateStudent.mutate(
+            { id: student.id, ...draft },
+            {
+              onSuccess: () => {
+                toast.success(`${draft.name} updated`);
+                onOpenChange(false);
+              },
+            },
+          );
         } else {
-          addStudent(draft);
-          toast.success(`${draft.name} admitted`);
+          createStudent.mutate(draft, {
+            onSuccess: () => {
+              toast.success(`${draft.name} admitted`);
+              onOpenChange(false);
+            },
+          });
         }
-        onOpenChange(false);
       }}
     >
       <div className="grid gap-4 sm:grid-cols-2">
@@ -93,7 +125,7 @@ export function StudentFormModal({
           <Select value={draft.className} onValueChange={(v) => setDraft({ ...draft, className: v })}>
             <SelectTrigger><SelectValue /></SelectTrigger>
             <SelectContent>
-              {settings.classes.map((c) => (
+              {classes.map((c) => (
                 <SelectItem key={c} value={c}>{c}</SelectItem>
               ))}
             </SelectContent>
@@ -138,7 +170,7 @@ export function StudentFormModal({
         </Field>
         <Field label="Subjects" className="sm:col-span-2" hint="Tap to select the subjects this student attends">
           <div className="flex flex-wrap gap-2">
-            {settings.subjects.map((s) => (
+            {subjects.map((s) => (
               <Badge
                 key={s}
                 onClick={() => toggleSubject(s)}

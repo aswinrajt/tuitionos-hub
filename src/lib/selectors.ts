@@ -1,4 +1,4 @@
-import { CURRENT_MONTH, TODAY, WEEKDAYS } from "@/data/mock";
+import { CURRENT_MONTH, TODAY, WEEKDAYS } from "@/lib/format";
 import type { AttendanceRecord, Batch, Exam, FeePayment, Student } from "@/data/types";
 
 export const weekdayOf = (date: string) => WEEKDAYS[(new Date(date).getDay() + 6) % 7]!;

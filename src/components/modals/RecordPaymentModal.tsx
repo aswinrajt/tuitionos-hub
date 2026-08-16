@@ -3,9 +3,8 @@ import { FormModal, Field } from "@/components/common/FormModal";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { useStore } from "@/store/tuition-store";
-import { CURRENT_MONTH, TODAY, monthOffset } from "@/data/mock";
-import { formatMonth, inr } from "@/lib/format";
+import { useRecordPayment, useStudents } from "@/hooks/api";
+import { CURRENT_MONTH, TODAY, formatMonth, inr, monthOffset } from "@/lib/format";
 import type { FeePayment } from "@/data/types";
 import { toast } from "sonner";
 
@@ -24,10 +23,11 @@ export function RecordPaymentModal({
   month?: string;
   onRecorded?: (payment: FeePayment) => void;
 }) {
-  const { students, recordPayment } = useStore();
+  const { data: students = [] } = useStudents({ status: "active" });
+  const recordPayment = useRecordPayment();
   const active = students.filter((s) => s.status === "active");
   const [draft, setDraft] = useState({
-    studentId: studentId ?? active[0]?.id ?? "",
+    studentId: studentId ?? "",
     month: month ?? CURRENT_MONTH,
     amount: 0,
     method: "UPI" as FeePayment["method"],
@@ -48,7 +48,7 @@ export function RecordPaymentModal({
       note: "",
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, studentId, month]);
+  }, [open, studentId, month, active[0]?.id]);
 
   return (
     <FormModal
@@ -57,6 +57,8 @@ export function RecordPaymentModal({
       title="Record fee payment"
       description="Log a payment and generate a receipt instantly."
       submitLabel="Record payment"
+      pending={recordPayment.isPending}
+      pendingLabel="Recording…"
       onSubmit={() => {
         if (!draft.studentId) {
           toast.error("Select a student");
@@ -66,16 +68,29 @@ export function RecordPaymentModal({
           toast.error("Enter a valid amount");
           return;
         }
-        const payment = recordPayment(draft);
-        toast.success(`Payment of ${inr(draft.amount)} recorded`);
-        onOpenChange(false);
-        onRecorded?.(payment);
+        recordPayment.mutate(
+          {
+            studentId: draft.studentId,
+            month: draft.month,
+            amount: draft.amount,
+            method: draft.method,
+            paidOn: draft.paidOn,
+            note: draft.note || undefined,
+          },
+          {
+            onSuccess: (payment) => {
+              toast.success(`Payment of ${inr(draft.amount)} recorded`);
+              onOpenChange(false);
+              onRecorded?.(payment);
+            },
+          },
+        );
       }}
     >
       <div className="grid gap-4 sm:grid-cols-2">
         <Field label="Student" className="sm:col-span-2">
           <Select
-            value={draft.studentId}
+            value={draft.studentId || undefined}
             onValueChange={(v) => {
               const s = students.find((x) => x.id === v);
               setDraft({ ...draft, studentId: v, amount: s?.monthlyFee ?? draft.amount });

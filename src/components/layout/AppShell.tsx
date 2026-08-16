@@ -32,10 +32,10 @@ import {
 import { Skeleton } from "@/components/ui/skeleton";
 import { navItems, mobilePrimary } from "./nav";
 import { useAuth } from "@/store/auth";
-import { useStore } from "@/store/tuition-store";
 import { cn } from "@/lib/utils";
 import { initials } from "@/lib/format";
 import { toast } from "sonner";
+import { useMarkNotificationRead, useMarkNotificationsRead, useNotifications, useSearch } from "@/hooks/api";
 
 function Brand({ compact }: { compact?: boolean }) {
   return (
@@ -80,19 +80,16 @@ function NavLinks({ onNavigate }: { onNavigate?: () => void }) {
 }
 
 function NotificationsBell() {
-  const { feePayments, homework } = useStore();
-  const items = [
-    { title: "8 students have pending fees", detail: "August 2026 collection cycle", tone: "text-destructive" },
-    { title: "Homework due tomorrow", detail: `${homework.filter((h) => h.status === "pending").length} pending assignments`, tone: "text-warning-foreground" },
-    { title: "Attendance not marked", detail: "XII PCM Batch — evening slot", tone: "text-info" },
-    { title: `Last payment received`, detail: `${feePayments.length} receipts generated so far`, tone: "text-success" },
-  ];
+  const { data: items = [] } = useNotifications();
+  const markAll = useMarkNotificationsRead();
+  const markOne = useMarkNotificationRead();
+  const unread = items.some((n) => !n.read);
   return (
     <Popover>
       <PopoverTrigger asChild>
         <Button variant="ghost" size="icon" className="relative" aria-label="Notifications">
           <Bell className="size-5" />
-          <span className="absolute right-1.5 top-1.5 size-2 rounded-full bg-destructive" />
+          {unread ? <span className="absolute right-1.5 top-1.5 size-2 rounded-full bg-destructive" /> : null}
         </Button>
       </PopoverTrigger>
       <PopoverContent align="end" className="w-80 p-0">
@@ -100,21 +97,38 @@ function NotificationsBell() {
           <p className="font-display text-sm font-semibold">Notifications</p>
         </div>
         <ul className="max-h-80 divide-y divide-border overflow-y-auto">
-          {items.map((n) => (
-            <li key={n.title} className="px-4 py-3">
-              <p className={cn("text-sm font-medium", n.tone)}>{n.title}</p>
-              <p className="text-xs text-muted-foreground">{n.detail}</p>
-            </li>
-          ))}
+          {items.length ? (
+            items.map((n) => (
+              <li key={n.id}>
+                <button
+                  type="button"
+                  className="w-full px-4 py-3 text-left"
+                  onClick={() => {
+                    if (!n.read) markOne.mutate(n.id);
+                  }}
+                >
+                  <p className={cn("text-sm font-medium", n.read ? "text-muted-foreground" : "text-foreground")}>{n.title}</p>
+                  <p className="text-xs text-muted-foreground">{n.detail}</p>
+                </button>
+              </li>
+            ))
+          ) : (
+            <li className="px-4 py-6 text-center text-sm text-muted-foreground">No notifications yet</li>
+          )}
         </ul>
         <div className="border-t border-border p-2">
           <Button
             variant="ghost"
             size="sm"
             className="w-full"
-            onClick={() => toast.success("All notifications marked as read")}
+            loading={markAll.isPending}
+            onClick={() =>
+              markAll.mutate(undefined, {
+                onSuccess: () => toast.success("All notifications marked as read"),
+              })
+            }
           >
-            Mark all as read
+            {markAll.isPending ? "Updating…" : "Mark all as read"}
           </Button>
         </div>
       </PopoverContent>
@@ -124,8 +138,9 @@ function NotificationsBell() {
 
 function GlobalSearch() {
   const [open, setOpen] = useState(false);
+  const [q, setQ] = useState("");
   const navigate = useNavigate();
-  const { students, batches, teachers } = useStore();
+  const { data } = useSearch(q);
 
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
@@ -143,6 +158,10 @@ function GlobalSearch() {
     navigate({ to, params } as never);
   };
 
+  const students = data?.students ?? [];
+  const batches = data?.batches ?? [];
+  const teachers = data?.teachers ?? [];
+
   return (
     <>
       <button
@@ -156,7 +175,7 @@ function GlobalSearch() {
         </kbd>
       </button>
       <CommandDialog open={open} onOpenChange={setOpen}>
-        <CommandInput placeholder="Type a name or page…" />
+        <CommandInput placeholder="Type a name or page…" value={q} onValueChange={setQ} />
         <CommandList>
           <CommandEmpty>No results found.</CommandEmpty>
           <CommandGroup heading="Pages">
@@ -195,7 +214,7 @@ function GlobalSearch() {
             {teachers.map((t) => (
               <CommandItem key={t.id} value={`teacher ${t.name}`} onSelect={() => go("/teachers")}>
                 {t.name}
-                <span className="ml-auto text-xs text-muted-foreground">{t.subjects[0]}</span>
+                <span className="ml-auto text-xs text-muted-foreground">{t.subjects?.[0]}</span>
               </CommandItem>
             ))}
           </CommandGroup>
@@ -238,9 +257,10 @@ function ProfileMenu() {
         <DropdownMenuItem
           className="text-destructive"
           onClick={() => {
-            logout();
-            toast.success("Logged out");
-            navigate({ to: "/login" });
+            void logout().then(() => {
+              toast.success("Logged out");
+              navigate({ to: "/login" });
+            });
           }}
         >
           <LogOut className="mr-2 size-4" /> Log out
