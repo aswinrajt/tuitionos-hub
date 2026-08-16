@@ -21,6 +21,8 @@ import { Route as TeachersRouteImport } from './routes/teachers'
 import { Route as BatchesIndexRouteImport } from './routes/batches.index'
 import { Route as BatchesBatchIdRouteImport } from './routes/batches.$batchId'
 import { Route as ParentIndexRouteImport } from './routes/parent.index'
+import { Route as ParentAttendanceRouteImport } from './routes/parent.attendance'
+import { Route as ParentChildRouteImport } from './routes/parent.child'
 import { Route as ParentLoginRouteImport } from './routes/parent.login'
 import { Route as StudentsIndexRouteImport } from './routes/students.index'
 import { Route as StudentsStudentIdRouteImport } from './routes/students.$studentId'
@@ -85,6 +87,16 @@ const ParentIndexRoute = ParentIndexRouteImport.update({
   path: '/parent/',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ParentAttendanceRoute = ParentAttendanceRouteImport.update({
+  id: '/parent/attendance',
+  path: '/parent/attendance',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ParentChildRoute = ParentChildRouteImport.update({
+  id: '/parent/child',
+  path: '/parent/child',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ParentLoginRoute = ParentLoginRouteImport.update({
   id: '/parent/login',
   path: '/parent/login',
@@ -112,6 +124,8 @@ export interface FileRoutesByFullPath {
   '/settings': typeof SettingsRoute
   '/teachers': typeof TeachersRoute
   '/batches/$batchId': typeof BatchesBatchIdRoute
+  '/parent/attendance': typeof ParentAttendanceRoute
+  '/parent/child': typeof ParentChildRoute
   '/parent/login': typeof ParentLoginRoute
   '/students/$studentId': typeof StudentsStudentIdRoute
   '/batches/': typeof BatchesIndexRoute
@@ -129,6 +143,8 @@ export interface FileRoutesByTo {
   '/settings': typeof SettingsRoute
   '/teachers': typeof TeachersRoute
   '/batches/$batchId': typeof BatchesBatchIdRoute
+  '/parent/attendance': typeof ParentAttendanceRoute
+  '/parent/child': typeof ParentChildRoute
   '/parent/login': typeof ParentLoginRoute
   '/students/$studentId': typeof StudentsStudentIdRoute
   '/batches': typeof BatchesIndexRoute
@@ -147,6 +163,8 @@ export interface FileRoutesById {
   '/settings': typeof SettingsRoute
   '/teachers': typeof TeachersRoute
   '/batches/$batchId': typeof BatchesBatchIdRoute
+  '/parent/attendance': typeof ParentAttendanceRoute
+  '/parent/child': typeof ParentChildRoute
   '/parent/login': typeof ParentLoginRoute
   '/students/$studentId': typeof StudentsStudentIdRoute
   '/batches/': typeof BatchesIndexRoute
@@ -166,6 +184,8 @@ export interface FileRouteTypes {
     | '/settings'
     | '/teachers'
     | '/batches/$batchId'
+    | '/parent/attendance'
+    | '/parent/child'
     | '/parent/login'
     | '/students/$studentId'
     | '/batches/'
@@ -183,6 +203,8 @@ export interface FileRouteTypes {
     | '/settings'
     | '/teachers'
     | '/batches/$batchId'
+    | '/parent/attendance'
+    | '/parent/child'
     | '/parent/login'
     | '/students/$studentId'
     | '/batches'
@@ -200,6 +222,8 @@ export interface FileRouteTypes {
     | '/settings'
     | '/teachers'
     | '/batches/$batchId'
+    | '/parent/attendance'
+    | '/parent/child'
     | '/parent/login'
     | '/students/$studentId'
     | '/batches/'
@@ -218,6 +242,8 @@ export interface RootRouteChildren {
   SettingsRoute: typeof SettingsRoute
   TeachersRoute: typeof TeachersRoute
   BatchesBatchIdRoute: typeof BatchesBatchIdRoute
+  ParentAttendanceRoute: typeof ParentAttendanceRoute
+  ParentChildRoute: typeof ParentChildRoute
   ParentLoginRoute: typeof ParentLoginRoute
   StudentsStudentIdRoute: typeof StudentsStudentIdRoute
   BatchesIndexRoute: typeof BatchesIndexRoute
@@ -311,6 +337,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ParentIndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/parent/attendance': {
+      id: '/parent/attendance'
+      path: '/parent/attendance'
+      fullPath: '/parent/attendance'
+      preLoaderRoute: typeof ParentAttendanceRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/parent/child': {
+      id: '/parent/child'
+      path: '/parent/child'
+      fullPath: '/parent/child'
+      preLoaderRoute: typeof ParentChildRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/parent/login': {
       id: '/parent/login'
       path: '/parent/login'
@@ -346,6 +386,8 @@ const rootRouteChildren: RootRouteChildren = {
   SettingsRoute: SettingsRoute,
   TeachersRoute: TeachersRoute,
   BatchesBatchIdRoute: BatchesBatchIdRoute,
+  ParentAttendanceRoute: ParentAttendanceRoute,
+  ParentChildRoute: ParentChildRoute,
   ParentLoginRoute: ParentLoginRoute,
   StudentsStudentIdRoute: StudentsStudentIdRoute,
   BatchesIndexRoute: BatchesIndexRoute,
