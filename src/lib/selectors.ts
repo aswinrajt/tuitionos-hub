@@ -1,7 +1,7 @@
 import { CURRENT_MONTH, TODAY, WEEKDAYS } from "@/data/mock";
 import type { AttendanceRecord, Batch, Exam, FeePayment, Student } from "@/data/types";
 
-export const weekdayOf = (date: string) => WEEKDAYS[(new Date(date).getDay() + 6) % 7];
+export const weekdayOf = (date: string) => WEEKDAYS[(new Date(date).getDay() + 6) % 7]!;
 
 export const studentsOfBatch = (students: Student[], batchId: string) =>
   students.filter((s) => s.batchId === batchId);

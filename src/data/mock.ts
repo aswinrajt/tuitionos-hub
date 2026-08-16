@@ -55,14 +55,14 @@ const feeByClass: Record<string, number> = {
 };
 
 export const students: Student[] = Array.from({ length: 26 }).map((_, i) => {
-  const batch = batches[i % batches.length];
-  const name = `${firstNames[i % firstNames.length]} ${lastNames[i % lastNames.length]}`;
+  const batch = batches[i % batches.length]!;
+  const name = `${firstNames[i % firstNames.length]!} ${lastNames[i % lastNames.length]!}`;
   const subjects = [batch.subject, ...(i % 3 === 0 ? ["English"] : i % 3 === 1 ? ["Mathematics"] : ["Science"])].filter((s, idx, arr) => arr.indexOf(s) === idx);
   return {
     id: `s${i + 1}`,
     name,
     phone: `+91 9${(800000000 + i * 1237891) .toString().slice(0, 9)}`,
-    parentName: `${parentFirst[i % parentFirst.length]} ${name.split(" ")[1]}`,
+    parentName: `${parentFirst[i % parentFirst.length]!} ${name.split(" ")[1]!}`,
     parentPhone: `+91 9${(700000000 + i * 998877).toString().slice(0, 9)}`,
     className: batch.className,
     batchId: batch.id,
@@ -71,7 +71,7 @@ export const students: Student[] = Array.from({ length: 26 }).map((_, i) => {
     monthlyFee: feeByClass[batch.className] ?? 1500,
     status: i % 13 === 12 ? "inactive" : "active",
     gender: i % 2 === 0 ? "Male" : "Female",
-    address: `${12 + i}, ${areas[i % areas.length]}`,
+    address: `${12 + i}, ${areas[i % areas.length]!}`,
   } satisfies Student;
 });
 
@@ -79,7 +79,7 @@ export const students: Student[] = Array.from({ length: 26 }).map((_, i) => {
 export const attendance: AttendanceRecord[] = [];
 for (let d = 24; d >= 0; d--) {
   const date = shift(-d);
-  const weekday = WEEKDAYS[(new Date(date).getDay() + 6) % 7];
+  const weekday = WEEKDAYS[(new Date(date).getDay() + 6) % 7]!;
   batches.forEach((b) => {
     if (!b.days.includes(weekday)) return;
     if (d === 0 && b.startTime > "12:00") return; // evening classes not marked yet today
@@ -109,7 +109,7 @@ let receipt = 1041;
       month,
       amount: s.monthlyFee,
       paidOn: mIdx === 2 ? shift(-((i % 12) + 1)) : `${month}-${String(((i % 20) + 3)).padStart(2, "0")}`,
-      method: (["UPI", "Cash", "Bank Transfer", "Cheque"] as const)[i % 4],
+      method: (["UPI", "Cash", "Bank Transfer", "Cheque"] as const)[i % 4]!,
       receiptNo: `RCPT-${receipt++}`,
     });
   });

@@ -16,7 +16,7 @@ export const formatMonth = (month: string) =>
   new Date(`${month}-01`).toLocaleDateString("en-IN", { month: "long", year: "numeric" });
 
 export const formatTime = (time: string) => {
-  const [h, m] = time.split(":").map(Number);
+  const [h = 0, m = 0] = time.split(":").map(Number) as number[];
   const suffix = h >= 12 ? "PM" : "AM";
   const hour = h % 12 === 0 ? 12 : h % 12;
   return `${hour}:${String(m).padStart(2, "0")} ${suffix}`;
