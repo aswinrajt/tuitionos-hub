@@ -27,6 +27,8 @@ import { Route as ParentExamsRouteImport } from './routes/parent.exams'
 import { Route as ParentFeesRouteImport } from './routes/parent.fees'
 import { Route as ParentHomeworkRouteImport } from './routes/parent.homework'
 import { Route as ParentLoginRouteImport } from './routes/parent.login'
+import { Route as ParentNotificationsRouteImport } from './routes/parent.notifications'
+import { Route as ParentProfileRouteImport } from './routes/parent.profile'
 import { Route as ParentScheduleRouteImport } from './routes/parent.schedule'
 import { Route as StudentsIndexRouteImport } from './routes/students.index'
 import { Route as StudentsStudentIdRouteImport } from './routes/students.$studentId'
@@ -121,6 +123,16 @@ const ParentLoginRoute = ParentLoginRouteImport.update({
   path: '/parent/login',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ParentNotificationsRoute = ParentNotificationsRouteImport.update({
+  id: '/parent/notifications',
+  path: '/parent/notifications',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ParentProfileRoute = ParentProfileRouteImport.update({
+  id: '/parent/profile',
+  path: '/parent/profile',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ParentScheduleRoute = ParentScheduleRouteImport.update({
   id: '/parent/schedule',
   path: '/parent/schedule',
@@ -154,6 +166,8 @@ export interface FileRoutesByFullPath {
   '/parent/fees': typeof ParentFeesRoute
   '/parent/homework': typeof ParentHomeworkRoute
   '/parent/login': typeof ParentLoginRoute
+  '/parent/notifications': typeof ParentNotificationsRoute
+  '/parent/profile': typeof ParentProfileRoute
   '/parent/schedule': typeof ParentScheduleRoute
   '/students/$studentId': typeof StudentsStudentIdRoute
   '/batches/': typeof BatchesIndexRoute
@@ -177,6 +191,8 @@ export interface FileRoutesByTo {
   '/parent/fees': typeof ParentFeesRoute
   '/parent/homework': typeof ParentHomeworkRoute
   '/parent/login': typeof ParentLoginRoute
+  '/parent/notifications': typeof ParentNotificationsRoute
+  '/parent/profile': typeof ParentProfileRoute
   '/parent/schedule': typeof ParentScheduleRoute
   '/students/$studentId': typeof StudentsStudentIdRoute
   '/batches': typeof BatchesIndexRoute
@@ -201,6 +217,8 @@ export interface FileRoutesById {
   '/parent/fees': typeof ParentFeesRoute
   '/parent/homework': typeof ParentHomeworkRoute
   '/parent/login': typeof ParentLoginRoute
+  '/parent/notifications': typeof ParentNotificationsRoute
+  '/parent/profile': typeof ParentProfileRoute
   '/parent/schedule': typeof ParentScheduleRoute
   '/students/$studentId': typeof StudentsStudentIdRoute
   '/batches/': typeof BatchesIndexRoute
@@ -226,6 +244,8 @@ export interface FileRouteTypes {
     | '/parent/fees'
     | '/parent/homework'
     | '/parent/login'
+    | '/parent/notifications'
+    | '/parent/profile'
     | '/parent/schedule'
     | '/students/$studentId'
     | '/batches/'
@@ -249,6 +269,8 @@ export interface FileRouteTypes {
     | '/parent/fees'
     | '/parent/homework'
     | '/parent/login'
+    | '/parent/notifications'
+    | '/parent/profile'
     | '/parent/schedule'
     | '/students/$studentId'
     | '/batches'
@@ -272,6 +294,8 @@ export interface FileRouteTypes {
     | '/parent/fees'
     | '/parent/homework'
     | '/parent/login'
+    | '/parent/notifications'
+    | '/parent/profile'
     | '/parent/schedule'
     | '/students/$studentId'
     | '/batches/'
@@ -296,6 +320,8 @@ export interface RootRouteChildren {
   ParentFeesRoute: typeof ParentFeesRoute
   ParentHomeworkRoute: typeof ParentHomeworkRoute
   ParentLoginRoute: typeof ParentLoginRoute
+  ParentNotificationsRoute: typeof ParentNotificationsRoute
+  ParentProfileRoute: typeof ParentProfileRoute
   ParentScheduleRoute: typeof ParentScheduleRoute
   StudentsStudentIdRoute: typeof StudentsStudentIdRoute
   BatchesIndexRoute: typeof BatchesIndexRoute
@@ -431,6 +457,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ParentLoginRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/parent/notifications': {
+      id: '/parent/notifications'
+      path: '/parent/notifications'
+      fullPath: '/parent/notifications'
+      preLoaderRoute: typeof ParentNotificationsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/parent/profile': {
+      id: '/parent/profile'
+      path: '/parent/profile'
+      fullPath: '/parent/profile'
+      preLoaderRoute: typeof ParentProfileRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/parent/schedule': {
       id: '/parent/schedule'
       path: '/parent/schedule'
@@ -472,6 +512,8 @@ const rootRouteChildren: RootRouteChildren = {
   ParentFeesRoute: ParentFeesRoute,
   ParentHomeworkRoute: ParentHomeworkRoute,
   ParentLoginRoute: ParentLoginRoute,
+  ParentNotificationsRoute: ParentNotificationsRoute,
+  ParentProfileRoute: ParentProfileRoute,
   ParentScheduleRoute: ParentScheduleRoute,
   StudentsStudentIdRoute: StudentsStudentIdRoute,
   BatchesIndexRoute: BatchesIndexRoute,
