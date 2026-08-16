@@ -15,6 +15,8 @@ import { Route as ExamsRouteImport } from './routes/exams'
 import { Route as FeesRouteImport } from './routes/fees'
 import { Route as HomeworkRouteImport } from './routes/homework'
 import { Route as LoginRouteImport } from './routes/login'
+import { Route as ParentsRouteImport } from './routes/parents'
+import { Route as SettingsRouteImport } from './routes/settings'
 import { Route as TeachersRouteImport } from './routes/teachers'
 import { Route as BatchesIndexRouteImport } from './routes/batches.index'
 import { Route as BatchesBatchIdRouteImport } from './routes/batches.$batchId'
@@ -51,6 +53,16 @@ const LoginRoute = LoginRouteImport.update({
   path: '/login',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ParentsRoute = ParentsRouteImport.update({
+  id: '/parents',
+  path: '/parents',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const SettingsRoute = SettingsRouteImport.update({
+  id: '/settings',
+  path: '/settings',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const TeachersRoute = TeachersRouteImport.update({
   id: '/teachers',
   path: '/teachers',
@@ -84,6 +96,8 @@ export interface FileRoutesByFullPath {
   '/fees': typeof FeesRoute
   '/homework': typeof HomeworkRoute
   '/login': typeof LoginRoute
+  '/parents': typeof ParentsRoute
+  '/settings': typeof SettingsRoute
   '/teachers': typeof TeachersRoute
   '/batches/$batchId': typeof BatchesBatchIdRoute
   '/students/$studentId': typeof StudentsStudentIdRoute
@@ -97,6 +111,8 @@ export interface FileRoutesByTo {
   '/fees': typeof FeesRoute
   '/homework': typeof HomeworkRoute
   '/login': typeof LoginRoute
+  '/parents': typeof ParentsRoute
+  '/settings': typeof SettingsRoute
   '/teachers': typeof TeachersRoute
   '/batches/$batchId': typeof BatchesBatchIdRoute
   '/students/$studentId': typeof StudentsStudentIdRoute
@@ -111,6 +127,8 @@ export interface FileRoutesById {
   '/fees': typeof FeesRoute
   '/homework': typeof HomeworkRoute
   '/login': typeof LoginRoute
+  '/parents': typeof ParentsRoute
+  '/settings': typeof SettingsRoute
   '/teachers': typeof TeachersRoute
   '/batches/$batchId': typeof BatchesBatchIdRoute
   '/students/$studentId': typeof StudentsStudentIdRoute
@@ -126,6 +144,8 @@ export interface FileRouteTypes {
     | '/fees'
     | '/homework'
     | '/login'
+    | '/parents'
+    | '/settings'
     | '/teachers'
     | '/batches/$batchId'
     | '/students/$studentId'
@@ -139,6 +159,8 @@ export interface FileRouteTypes {
     | '/fees'
     | '/homework'
     | '/login'
+    | '/parents'
+    | '/settings'
     | '/teachers'
     | '/batches/$batchId'
     | '/students/$studentId'
@@ -152,6 +174,8 @@ export interface FileRouteTypes {
     | '/fees'
     | '/homework'
     | '/login'
+    | '/parents'
+    | '/settings'
     | '/teachers'
     | '/batches/$batchId'
     | '/students/$studentId'
@@ -166,6 +190,8 @@ export interface RootRouteChildren {
   FeesRoute: typeof FeesRoute
   HomeworkRoute: typeof HomeworkRoute
   LoginRoute: typeof LoginRoute
+  ParentsRoute: typeof ParentsRoute
+  SettingsRoute: typeof SettingsRoute
   TeachersRoute: typeof TeachersRoute
   BatchesBatchIdRoute: typeof BatchesBatchIdRoute
   StudentsStudentIdRoute: typeof StudentsStudentIdRoute
@@ -217,6 +243,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof LoginRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/parents': {
+      id: '/parents'
+      path: '/parents'
+      fullPath: '/parents'
+      preLoaderRoute: typeof ParentsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/settings': {
+      id: '/settings'
+      path: '/settings'
+      fullPath: '/settings'
+      preLoaderRoute: typeof SettingsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/teachers': {
       id: '/teachers'
       path: '/teachers'
@@ -262,6 +302,8 @@ const rootRouteChildren: RootRouteChildren = {
   FeesRoute: FeesRoute,
   HomeworkRoute: HomeworkRoute,
   LoginRoute: LoginRoute,
+  ParentsRoute: ParentsRoute,
+  SettingsRoute: SettingsRoute,
   TeachersRoute: TeachersRoute,
   BatchesBatchIdRoute: BatchesBatchIdRoute,
   StudentsStudentIdRoute: StudentsStudentIdRoute,
