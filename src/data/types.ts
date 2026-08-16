@@ -115,3 +115,25 @@ export interface CentreSettings {
   classes: string[];
   subjects: string[];
 }
+
+export interface Announcement {
+  id: string;
+  title: string;
+  body: string;
+  audience: "all" | string; // "all" or a batchId
+  createdAt: string;
+  pinned: boolean;
+}
+
+export interface ParentAccount {
+  id: string;
+  name: string;
+  phone: string;
+  email: string;
+  studentIds: string[];
+  notifyFees: boolean;
+  notifyAttendance: boolean;
+  notifyHomework: boolean;
+  notifyResults: boolean;
+  notifyAnnouncements: boolean;
+}

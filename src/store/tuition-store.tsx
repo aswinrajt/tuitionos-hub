@@ -2,6 +2,8 @@ import { createContext, useCallback, useContext, useMemo, useState, type ReactNo
 import * as mock from "@/data/mock";
 import type {
   ActivityItem,
+  Announcement,
+  ParentAccount,
   AttendanceMark,
   AttendanceRecord,
   Batch,
@@ -24,6 +26,8 @@ interface StoreValue {
   homework: Homework[];
   exams: Exam[];
   activities: ActivityItem[];
+  announcements: Announcement[];
+  parentAccounts: ParentAccount[];
   settings: CentreSettings;
   addStudent: (s: Omit<Student, "id">) => Student;
   updateStudent: (id: string, patch: Partial<Student>) => void;
@@ -42,6 +46,9 @@ interface StoreValue {
   addExam: (e: Omit<Exam, "id">) => Exam;
   saveExamMarks: (examId: string, results: { studentId: string; marks: number | null }[]) => void;
   deleteExam: (id: string) => void;
+  addAnnouncement: (a: Omit<Announcement, "id" | "createdAt">) => Announcement;
+  deleteAnnouncement: (id: string) => void;
+  updateParentAccount: (id: string, patch: Partial<ParentAccount>) => void;
   updateSettings: (patch: Partial<CentreSettings>) => void;
 }
 
@@ -56,6 +63,8 @@ export function TuitionStoreProvider({ children }: { children: ReactNode }) {
   const [homework, setHomework] = useState<Homework[]>(mock.homework);
   const [exams, setExams] = useState<Exam[]>(mock.exams);
   const [activities, setActivities] = useState<ActivityItem[]>(mock.activities);
+  const [announcements, setAnnouncements] = useState<Announcement[]>(mock.announcements);
+  const [parentAccounts, setParentAccounts] = useState<ParentAccount[]>(mock.parentAccounts);
   const [settings, setSettings] = useState<CentreSettings>(mock.settings);
 
   const log = useCallback((type: ActivityItem["type"], message: string) => {
@@ -72,6 +81,8 @@ export function TuitionStoreProvider({ children }: { children: ReactNode }) {
       homework,
       exams,
       activities,
+      announcements,
+      parentAccounts,
       settings,
       addStudent: (s) => {
         const student: Student = { ...s, id: uid("s") };
@@ -151,9 +162,18 @@ export function TuitionStoreProvider({ children }: { children: ReactNode }) {
         log("exam", `Marks updated for an exam`);
       },
       deleteExam: (id) => setExams((prev) => prev.filter((e) => e.id !== id)),
+      addAnnouncement: (a) => {
+        const announcement: Announcement = { ...a, id: uid("an"), createdAt: mock.TODAY };
+        setAnnouncements((prev) => [announcement, ...prev]);
+        log("batch", `Announcement '${announcement.title}' published to parents`);
+        return announcement;
+      },
+      deleteAnnouncement: (id) => setAnnouncements((prev) => prev.filter((a) => a.id !== id)),
+      updateParentAccount: (id, patch) =>
+        setParentAccounts((prev) => prev.map((p) => (p.id === id ? { ...p, ...patch } : p))),
       updateSettings: (patch) => setSettings((prev) => ({ ...prev, ...patch })),
     }),
-    [students, batches, teachers, attendance, feePayments, homework, exams, activities, settings, log],
+    [students, batches, teachers, attendance, feePayments, homework, exams, activities, announcements, parentAccounts, settings, log],
   );
 
   return <StoreContext.Provider value={value}>{children}</StoreContext.Provider>;

@@ -1,4 +1,4 @@
-import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { GraduationCap, Loader2, ShieldCheck, Sparkles, Wallet } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -253,6 +253,13 @@ function LoginPage() {
               )}
             </TabsContent>
           </Tabs>
+
+          <p className="mt-6 text-center text-sm text-muted-foreground">
+            Are you a parent?{" "}
+            <Link to="/parent/login" className="font-medium text-primary">
+              Go to the Parent Portal
+            </Link>
+          </p>
         </div>
       </div>
     </div>

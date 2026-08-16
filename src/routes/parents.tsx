@@ -1,12 +1,15 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import { useState } from "react";
-import { CalendarCheck, ClipboardList, MessageSquare, Smartphone, UserRound, Wallet } from "lucide-react";
+import { CalendarCheck, ClipboardList, ExternalLink, Megaphone, MessageSquare, Send, Smartphone, UserRound, Wallet } from "lucide-react";
 import { AppShell } from "@/components/layout/AppShell";
 import { PageHeader } from "@/components/common/PageHeader";
 import { SectionCard } from "@/components/common/SectionCard";
 import { StatusBadge } from "@/components/common/StatusBadge";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useStore } from "@/store/tuition-store";
 import { attendancePct, examStats } from "@/lib/selectors";
@@ -54,11 +57,18 @@ function ParentsPage() {
     <AppShell>
       <PageHeader
         title="Parent portal preview"
-        description="This is the read-only view parents get on their phone. Coming soon as a separate login."
+        description="This is the read-only view parents get on their phone. Everything you record here reaches them instantly in the parent portal."
         actions={
-          <Button variant="outline" onClick={() => toast.success("Portal invite sent to parent on WhatsApp")}>
-            <MessageSquare className="mr-2 size-4" /> Send invite
-          </Button>
+          <div className="flex flex-wrap gap-2">
+            <Button variant="outline" onClick={() => toast.success("Portal invite sent to parent on WhatsApp")}>
+              <MessageSquare className="mr-2 size-4" /> Send invite
+            </Button>
+            <Button asChild>
+              <Link to="/parent/login" target="_blank">
+                <ExternalLink className="mr-2 size-4" /> Open parent portal
+              </Link>
+            </Button>
+          </div>
         }
       />
 
@@ -166,9 +176,79 @@ function ParentsPage() {
           </div>
         </div>
         <p className="mt-4 text-center text-xs text-muted-foreground">
-          Parent logins with WhatsApp updates are on the roadmap.
+          Parents sign in at /parent with their registered mobile number and OTP.
         </p>
       </div>
+
+      <AnnouncementComposer />
     </AppShell>
+  );
+}
+
+function AnnouncementComposer() {
+  const store = useStore();
+  const [title, setTitle] = useState("");
+  const [body, setBody] = useState("");
+  const [audience, setAudience] = useState("all");
+
+  return (
+    <SectionCard
+      title="Announcements to parents"
+      description="Published notices show up in every parent's notification feed."
+      bodyClassName="p-4 space-y-4"
+    >
+      <div className="grid gap-3 lg:grid-cols-2">
+        <div className="space-y-3">
+          <div className="space-y-1.5">
+            <Label htmlFor="an-title">Title</Label>
+            <Input id="an-title" value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Diwali holiday notice" />
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="an-body">Message</Label>
+            <Textarea id="an-body" rows={3} value={body} onChange={(e) => setBody(e.target.value)} placeholder="The centre will remain closed on 20 Oct." />
+          </div>
+          <div className="space-y-1.5">
+            <Label>Audience</Label>
+            <Select value={audience} onValueChange={setAudience}>
+              <SelectTrigger><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All parents</SelectItem>
+                {store.batches.map((b) => (
+                  <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <Button
+            disabled={!title.trim() || !body.trim()}
+            onClick={() => {
+              store.addAnnouncement({ title: title.trim(), body: body.trim(), audience, pinned: false });
+              setTitle("");
+              setBody("");
+              toast.success("Announcement published to the parent portal");
+            }}
+          >
+            <Send className="mr-2 size-4" /> Publish to parents
+          </Button>
+        </div>
+
+        <ul className="space-y-2">
+          {store.announcements.slice(0, 5).map((a) => (
+            <li key={a.id} className="rounded-xl border border-border p-3">
+              <div className="flex items-start justify-between gap-2">
+                <p className="flex items-center gap-1.5 text-sm font-semibold">
+                  <Megaphone className="size-3.5 text-primary" /> {a.title}
+                </p>
+                <span className="shrink-0 text-xs text-muted-foreground">{formatDate(a.createdAt)}</span>
+              </div>
+              <p className="mt-1 text-xs text-muted-foreground">{a.body}</p>
+              <p className="mt-1 text-[11px] text-muted-foreground">
+                To {a.audience === "all" ? "all parents" : store.batches.find((b) => b.id === a.audience)?.name ?? a.audience}
+              </p>
+            </li>
+          ))}
+        </ul>
+      </div>
+    </SectionCard>
   );
 }
