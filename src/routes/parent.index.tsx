@@ -9,11 +9,10 @@ import {
   Wallet,
 } from "lucide-react";
 import { ParentCard, ParentEmpty, ParentShell, useParentContext } from "@/components/parent/ParentShell";
-import { StatusBadge } from "@/components/common/StatusBadge";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { CURRENT_MONTH, TODAY } from "@/data/mock";
-import { studentFeeStatus } from "@/lib/selectors";
+import { studentFeeStatus, weekdayOf } from "@/lib/selectors";
 import {
   childAttendanceSummary,
   childExams,
@@ -61,7 +60,7 @@ function ParentDashboard() {
   const latest = childExams(store.exams, child)[0];
   const next = nextClassFor(store.batches, child);
   const todayClasses = childSchedule(store.batches, child).find(
-    (d) => d.day === new Date(TODAY).toLocaleDateString("en-IN", { weekday: "short" }),
+    (d) => d.day === weekdayOf(TODAY),
   );
   const announcements = store.announcements
     .filter((a) => a.audience === "all" || a.audience === child.batchId)
