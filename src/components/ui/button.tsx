@@ -43,7 +43,7 @@ const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
     const Comp = asChild ? Slot : "button";
     return (
       <Comp
-        className={cn(buttonVariants({ variant, size, className }))}
+        className={cn(buttonVariants({ variant, size, className }), loading && "[&_svg]:hidden")}
         ref={ref}
         disabled={disabled || loading}
         aria-busy={loading || undefined}
@@ -54,7 +54,7 @@ const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
         ) : (
           <>
             {loading ? <Spinner className="size-4" /> : null}
-            <span className={cn(loading && "inline-flex items-center gap-2 [&_svg]:hidden")}>{children}</span>
+            {children}
           </>
         )}
       </Comp>
