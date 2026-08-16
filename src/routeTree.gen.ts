@@ -10,33 +10,193 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as AttendanceRouteImport } from './routes/attendance'
+import { Route as ExamsRouteImport } from './routes/exams'
+import { Route as FeesRouteImport } from './routes/fees'
+import { Route as HomeworkRouteImport } from './routes/homework'
+import { Route as LoginRouteImport } from './routes/login'
+import { Route as ParentsRouteImport } from './routes/parents'
+import { Route as SettingsRouteImport } from './routes/settings'
+import { Route as TeachersRouteImport } from './routes/teachers'
+import { Route as BatchesIndexRouteImport } from './routes/batches.index'
+import { Route as BatchesBatchIdRouteImport } from './routes/batches.$batchId'
+import { Route as StudentsIndexRouteImport } from './routes/students.index'
+import { Route as StudentsStudentIdRouteImport } from './routes/students.$studentId'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
+const AttendanceRoute = AttendanceRouteImport.update({
+  id: '/attendance',
+  path: '/attendance',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ExamsRoute = ExamsRouteImport.update({
+  id: '/exams',
+  path: '/exams',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const FeesRoute = FeesRouteImport.update({
+  id: '/fees',
+  path: '/fees',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const HomeworkRoute = HomeworkRouteImport.update({
+  id: '/homework',
+  path: '/homework',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const LoginRoute = LoginRouteImport.update({
+  id: '/login',
+  path: '/login',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ParentsRoute = ParentsRouteImport.update({
+  id: '/parents',
+  path: '/parents',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const SettingsRoute = SettingsRouteImport.update({
+  id: '/settings',
+  path: '/settings',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const TeachersRoute = TeachersRouteImport.update({
+  id: '/teachers',
+  path: '/teachers',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const BatchesIndexRoute = BatchesIndexRouteImport.update({
+  id: '/batches/',
+  path: '/batches/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const BatchesBatchIdRoute = BatchesBatchIdRouteImport.update({
+  id: '/batches/$batchId',
+  path: '/batches/$batchId',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const StudentsIndexRoute = StudentsIndexRouteImport.update({
+  id: '/students/',
+  path: '/students/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const StudentsStudentIdRoute = StudentsStudentIdRouteImport.update({
+  id: '/students/$studentId',
+  path: '/students/$studentId',
+  getParentRoute: () => rootRouteImport,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/attendance': typeof AttendanceRoute
+  '/exams': typeof ExamsRoute
+  '/fees': typeof FeesRoute
+  '/homework': typeof HomeworkRoute
+  '/login': typeof LoginRoute
+  '/parents': typeof ParentsRoute
+  '/settings': typeof SettingsRoute
+  '/teachers': typeof TeachersRoute
+  '/batches/$batchId': typeof BatchesBatchIdRoute
+  '/students/$studentId': typeof StudentsStudentIdRoute
+  '/batches/': typeof BatchesIndexRoute
+  '/students/': typeof StudentsIndexRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/attendance': typeof AttendanceRoute
+  '/exams': typeof ExamsRoute
+  '/fees': typeof FeesRoute
+  '/homework': typeof HomeworkRoute
+  '/login': typeof LoginRoute
+  '/parents': typeof ParentsRoute
+  '/settings': typeof SettingsRoute
+  '/teachers': typeof TeachersRoute
+  '/batches/$batchId': typeof BatchesBatchIdRoute
+  '/students/$studentId': typeof StudentsStudentIdRoute
+  '/batches': typeof BatchesIndexRoute
+  '/students': typeof StudentsIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/attendance': typeof AttendanceRoute
+  '/exams': typeof ExamsRoute
+  '/fees': typeof FeesRoute
+  '/homework': typeof HomeworkRoute
+  '/login': typeof LoginRoute
+  '/parents': typeof ParentsRoute
+  '/settings': typeof SettingsRoute
+  '/teachers': typeof TeachersRoute
+  '/batches/$batchId': typeof BatchesBatchIdRoute
+  '/students/$studentId': typeof StudentsStudentIdRoute
+  '/batches/': typeof BatchesIndexRoute
+  '/students/': typeof StudentsIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/'
+  fullPaths:
+    | '/'
+    | '/attendance'
+    | '/exams'
+    | '/fees'
+    | '/homework'
+    | '/login'
+    | '/parents'
+    | '/settings'
+    | '/teachers'
+    | '/batches/$batchId'
+    | '/students/$studentId'
+    | '/batches/'
+    | '/students/'
   fileRoutesByTo: FileRoutesByTo
-  to: '/'
-  id: '__root__' | '/'
+  to:
+    | '/'
+    | '/attendance'
+    | '/exams'
+    | '/fees'
+    | '/homework'
+    | '/login'
+    | '/parents'
+    | '/settings'
+    | '/teachers'
+    | '/batches/$batchId'
+    | '/students/$studentId'
+    | '/batches'
+    | '/students'
+  id:
+    | '__root__'
+    | '/'
+    | '/attendance'
+    | '/exams'
+    | '/fees'
+    | '/homework'
+    | '/login'
+    | '/parents'
+    | '/settings'
+    | '/teachers'
+    | '/batches/$batchId'
+    | '/students/$studentId'
+    | '/batches/'
+    | '/students/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  AttendanceRoute: typeof AttendanceRoute
+  ExamsRoute: typeof ExamsRoute
+  FeesRoute: typeof FeesRoute
+  HomeworkRoute: typeof HomeworkRoute
+  LoginRoute: typeof LoginRoute
+  ParentsRoute: typeof ParentsRoute
+  SettingsRoute: typeof SettingsRoute
+  TeachersRoute: typeof TeachersRoute
+  BatchesBatchIdRoute: typeof BatchesBatchIdRoute
+  StudentsStudentIdRoute: typeof StudentsStudentIdRoute
+  BatchesIndexRoute: typeof BatchesIndexRoute
+  StudentsIndexRoute: typeof StudentsIndexRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -48,11 +208,107 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/attendance': {
+      id: '/attendance'
+      path: '/attendance'
+      fullPath: '/attendance'
+      preLoaderRoute: typeof AttendanceRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/exams': {
+      id: '/exams'
+      path: '/exams'
+      fullPath: '/exams'
+      preLoaderRoute: typeof ExamsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/fees': {
+      id: '/fees'
+      path: '/fees'
+      fullPath: '/fees'
+      preLoaderRoute: typeof FeesRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/homework': {
+      id: '/homework'
+      path: '/homework'
+      fullPath: '/homework'
+      preLoaderRoute: typeof HomeworkRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/login': {
+      id: '/login'
+      path: '/login'
+      fullPath: '/login'
+      preLoaderRoute: typeof LoginRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/parents': {
+      id: '/parents'
+      path: '/parents'
+      fullPath: '/parents'
+      preLoaderRoute: typeof ParentsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/settings': {
+      id: '/settings'
+      path: '/settings'
+      fullPath: '/settings'
+      preLoaderRoute: typeof SettingsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/teachers': {
+      id: '/teachers'
+      path: '/teachers'
+      fullPath: '/teachers'
+      preLoaderRoute: typeof TeachersRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/batches/': {
+      id: '/batches/'
+      path: '/batches'
+      fullPath: '/batches/'
+      preLoaderRoute: typeof BatchesIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/batches/$batchId': {
+      id: '/batches/$batchId'
+      path: '/batches/$batchId'
+      fullPath: '/batches/$batchId'
+      preLoaderRoute: typeof BatchesBatchIdRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/students/': {
+      id: '/students/'
+      path: '/students'
+      fullPath: '/students/'
+      preLoaderRoute: typeof StudentsIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/students/$studentId': {
+      id: '/students/$studentId'
+      path: '/students/$studentId'
+      fullPath: '/students/$studentId'
+      preLoaderRoute: typeof StudentsStudentIdRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  AttendanceRoute: AttendanceRoute,
+  ExamsRoute: ExamsRoute,
+  FeesRoute: FeesRoute,
+  HomeworkRoute: HomeworkRoute,
+  LoginRoute: LoginRoute,
+  ParentsRoute: ParentsRoute,
+  SettingsRoute: SettingsRoute,
+  TeachersRoute: TeachersRoute,
+  BatchesBatchIdRoute: BatchesBatchIdRoute,
+  StudentsStudentIdRoute: StudentsStudentIdRoute,
+  BatchesIndexRoute: BatchesIndexRoute,
+  StudentsIndexRoute: StudentsIndexRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
