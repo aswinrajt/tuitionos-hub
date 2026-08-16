@@ -29,7 +29,7 @@ export function HomeworkFormModal({
     dueDate: shift(3),
     status: "pending" as const,
   };
-  const [draft, setDraft] = useState(blank);
+  const [draft, setDraft] = useState<Omit<Homework, "id">>(blank);
 
   useEffect(() => {
     if (open) setDraft(homework ? { ...homework } : blank);

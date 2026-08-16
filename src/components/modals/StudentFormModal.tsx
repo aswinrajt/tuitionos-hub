@@ -34,7 +34,7 @@ export function StudentFormModal({
   student?: Student;
 }) {
   const { batches, settings, addStudent, updateStudent } = useStore();
-  const [draft, setDraft] = useState(() => emptyDraft(batches[0]?.id ?? "", settings.classes[4] ?? "Class 10"));
+  const [draft, setDraft] = useState<Omit<Student, "id">>(() => emptyDraft(batches[0]?.id ?? "", settings.classes[4] ?? "Class 10"));
 
   useEffect(() => {
     if (open)

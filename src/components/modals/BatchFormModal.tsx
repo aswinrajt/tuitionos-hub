@@ -29,7 +29,7 @@ export function BatchFormModal({
     room: "Room 1",
     status: "active" as const,
   };
-  const [draft, setDraft] = useState(blank);
+  const [draft, setDraft] = useState<Omit<Batch, "id">>(blank);
 
   useEffect(() => {
     if (open) setDraft(batch ? { ...batch } : blank);
