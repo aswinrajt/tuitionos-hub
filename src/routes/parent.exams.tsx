@@ -72,12 +72,12 @@ function ParentExamsPage() {
             <div className="h-44">
               <ResponsiveContainer width="100%" height="100%">
                 <LineChart data={trend} margin={{ top: 5, right: 8, bottom: 0, left: -22 }}>
-                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="hsl(var(--border))" />
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="var(--color-border)" />
                   <XAxis dataKey="label" tickLine={false} axisLine={false} fontSize={11} />
                   <YAxis domain={[0, 100]} tickLine={false} axisLine={false} fontSize={11} />
                   <Tooltip formatter={(v: number, name) => [`${v}%`, name === "score" ? child.name.split(" ")[0] : "Class average"]} />
-                  <Line type="monotone" dataKey="score" stroke="hsl(var(--primary))" strokeWidth={2.5} dot />
-                  <Line type="monotone" dataKey="average" stroke="hsl(var(--muted-foreground))" strokeDasharray="4 4" strokeWidth={2} dot={false} />
+                  <Line type="monotone" dataKey="score" stroke="var(--color-chart-1)" strokeWidth={2.5} dot />
+                  <Line type="monotone" dataKey="average" stroke="var(--color-muted-foreground)" strokeDasharray="4 4" strokeWidth={2} dot={false} />
                 </LineChart>
               </ResponsiveContainer>
             </div>

@@ -127,11 +127,11 @@ function ParentAttendancePage() {
         <div className="h-40">
           <ResponsiveContainer width="100%" height="100%">
             <BarChart data={trend} margin={{ top: 5, right: 5, bottom: 0, left: -20 }}>
-              <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="hsl(var(--border))" />
+              <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="var(--color-border)" />
               <XAxis dataKey="label" tickLine={false} axisLine={false} fontSize={12} />
               <YAxis domain={[0, 100]} tickLine={false} axisLine={false} fontSize={12} />
               <Tooltip formatter={(v: number) => [`${Math.round(v)}%`, "Attendance"]} />
-              <Bar dataKey="percent" fill="hsl(var(--primary))" radius={[6, 6, 0, 0]} />
+              <Bar dataKey="percent" fill="var(--color-chart-1)" radius={[6, 6, 0, 0]} />
             </BarChart>
           </ResponsiveContainer>
         </div>
